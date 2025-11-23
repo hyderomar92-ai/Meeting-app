@@ -1,0 +1,7 @@
+{
+  "name": " EduLog Pro",
+  "description": "A comprehensive meeting and notes log for educators, featuring AI-powered note enhancement and interaction history tracking.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
