@@ -36,6 +36,7 @@ const MeetingForm: React.FC<MeetingFormProps> = ({ onSubmit, onCancel, initialAt
   
   // Voice Dictation State
   const [isListening, setIsListening] = useState(false);
+  const [speechError, setSpeechError] = useState<string | null>(null);
   const recognitionRef = useRef<any>(null);
   
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -47,6 +48,11 @@ const MeetingForm: React.FC<MeetingFormProps> = ({ onSubmit, onCancel, initialAt
         recognitionRef.current = new SpeechRecognition();
         recognitionRef.current.continuous = true;
         recognitionRef.current.interimResults = true;
+
+        recognitionRef.current.onstart = () => {
+            setIsListening(true);
+            setSpeechError(null);
+        };
 
         recognitionRef.current.onresult = (event: any) => {
             let interimTranscript = '';
@@ -71,15 +77,44 @@ const MeetingForm: React.FC<MeetingFormProps> = ({ onSubmit, onCancel, initialAt
 
         recognitionRef.current.onerror = (event: any) => {
             console.error('Speech recognition error', event.error);
-            setIsListening(false);
-            if (event.error === 'not-allowed') {
-                alert("Microphone access was denied. Please allow microphone access in your browser settings to use voice dictation.");
+            
+            // Aborted usually means stopped by user or system reset, ignore unless we wanted to listen
+            if (event.error === 'aborted') {
+                setIsListening(false);
+                return;
             }
+
+            setIsListening(false);
+            
+            let message = 'Dictation error.';
+            switch (event.error) {
+                case 'not-allowed':
+                    message = 'Microphone blocked. Allow access in settings.';
+                    break;
+                case 'no-speech':
+                    message = 'No speech detected. Please speak louder.';
+                    break;
+                case 'audio-capture':
+                    message = 'No microphone found.';
+                    break;
+                case 'network':
+                    message = 'Network error. Internet required.';
+                    break;
+                case 'service-not-allowed':
+                    message = 'Dictation service not allowed.';
+                    break;
+                case 'language-not-supported':
+                    message = 'Language not supported.';
+                    break;
+                default:
+                    message = `Error: ${event.error}`;
+            }
+            setSpeechError(message);
+            // Clear error automatically after 5 seconds
+            setTimeout(() => setSpeechError(null), 5000);
         };
         
         recognitionRef.current.onend = () => {
-             // If we didn't manually stop it (isListening is true), restart it? 
-             // For now, let's just let it stop to save battery/resources
              setIsListening(false);
         };
     }
@@ -97,7 +132,7 @@ const MeetingForm: React.FC<MeetingFormProps> = ({ onSubmit, onCancel, initialAt
       } else {
           try {
               recognitionRef.current.start();
-              setIsListening(true);
+              setSpeechError(null);
           } catch (error) {
               console.error("Failed to start recognition:", error);
           }
@@ -343,7 +378,13 @@ const MeetingForm: React.FC<MeetingFormProps> = ({ onSubmit, onCancel, initialAt
                 />
                 
                 {/* Dictation Button inside Textarea */}
-                <div className="absolute bottom-3 right-3">
+                <div className="absolute bottom-3 right-3 flex flex-col items-end">
+                   {speechError && (
+                        <div className="mb-2 bg-red-50 text-red-600 text-xs px-3 py-1.5 rounded-lg border border-red-100 shadow-sm animate-fade-in flex items-center">
+                            <AlertCircle size={12} className="mr-1.5" />
+                            {speechError}
+                        </div>
+                   )}
                    <button 
                       type="button"
                       onClick={toggleListening}

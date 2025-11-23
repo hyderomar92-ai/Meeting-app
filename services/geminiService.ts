@@ -190,7 +190,8 @@ export const generateComprehensiveReport = async (
   name: string,
   startDate: string,
   endDate: string,
-  studentProfile?: any
+  studentProfile?: any,
+  audience: 'PARENTS' | 'SLT' | 'DSL' | 'TEACHER' | 'EXTERNAL' = 'PARENTS'
 ): Promise<GeneratedReportResponse> => {
 
   const contextData = logs.map(l => `Date: ${l.date}, Type: ${l.type}, Notes: ${l.notes}, Outcome/Sentiment: ${l.sentiment}`).join('\n');
@@ -209,6 +210,15 @@ export const generateComprehensiveReport = async (
       `;
   }
 
+  // Audience Instructions
+  const audienceInstructions = {
+    'PARENTS': `Tone: Professional but accessible, supportive, partnership-oriented. Avoid internal jargon. Focus on wellbeing, progress, social development, and how the home can support the school. Highlight strengths warmly.`,
+    'SLT': `Tone: Formal, concise, data-driven, executive. Focus on attainment, attendance stats, behavioral trends, and high-level strategic interventions. Minimize fluff.`,
+    'DSL': `Tone: Strictly formal, objective, factual, legalistic. Focus on risk levels, specific chronology of incidents, disclosure details, and compliance with statutory frameworks.`,
+    'TEACHER': `Tone: Professional, practical, collaborative. Focus on classroom strategies, specific learning gaps, behavioral triggers, and peer-to-peer advice.`,
+    'EXTERNAL': `Tone: Formal, objective, detached. Focus on factual history, support needs, and inter-agency cooperation requirements.`,
+  };
+
   if (!apiKey) {
     return {
       title: `${type === 'STUDENT' ? 'Student' : 'Class'} Progress Report`,
@@ -223,27 +233,30 @@ export const generateComprehensiveReport = async (
 
   try {
     const prompt = `
-      You are a senior educator writing a formal progress report.
+      You are a senior educator writing a formal report.
       
-      Report Target: ${type === 'STUDENT' ? `Individual Student Report for ${name}` : `Class/General Report for ${name}`}
+      **TARGET AUDIENCE**: ${audience}
+      **AUDIENCE INSTRUCTION**: ${audienceInstructions[audience]}
+
+      Report Subject: ${type === 'STUDENT' ? `Individual Student Report for ${name}` : `Class/General Report for ${name}`}
       Period: ${startDate} to ${endDate}
       
       ${profileContext}
 
-      Based ONLY on the provided interaction logs and safeguarding records, generate a comprehensive report.
+      Based ONLY on the provided interaction logs and safeguarding records, generate a comprehensive report tailored specifically for the target audience.
       
-      Interaction Logs (Filtered by user criteria):
+      Interaction Logs (Filtered):
       ${contextData.length > 0 ? contextData : "No specific meeting logs found matching the filter criteria."}
 
       Safeguarding/Behavioral Incidents (If applicable):
       ${safetyData.length > 0 ? safetyData : "No safeguarding incidents recorded in this period."}
 
       Tasks:
-      1. **Executive Summary**: A professional paragraph summarizing the student's progress, behavior, and engagement during this period. Mention specific incidents if relevant but keep a professional tone.
-      2. **Key Strengths**: List 3-4 positive observations backed by evidence from the logs.
-      3. **Areas for Growth**: List 2-3 specific areas needing improvement, citing evidence where possible.
+      1. **Executive Summary**: A paragraph summarizing the progress/behavior/engagement. Tone must match the audience.
+      2. **Key Strengths**: List 3-4 positive observations.
+      3. **Areas for Growth**: List 2-3 specific areas needing improvement or attention.
       4. **Attendance/Engagement Trend**: One word or short phrase (e.g., "Improving", "Inconsistent", "Excellent").
-      5. **Action Plan**: 3-4 concrete, actionable recommendations for the student, parents, or teachers moving forward.
+      5. **Action Plan**: 3-4 concrete, actionable recommendations appropriate for the specific audience to read.
     `;
 
     const response = await ai.models.generateContent({

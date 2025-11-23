@@ -33,6 +33,18 @@ export interface MeetingLog {
   createdBy?: string; // Name of the user who created this log
 }
 
+export interface BehaviourEntry {
+  id: string;
+  studentName: string;
+  studentClass?: string;
+  date: string;
+  type: 'POSITIVE' | 'NEGATIVE';
+  category: string;
+  points: number;
+  description?: string;
+  loggedBy: string;
+}
+
 export interface StudentStats {
   name: string;
   totalMeetings: number;
@@ -60,6 +72,7 @@ export interface SafeguardingCase {
   };
   status: 'Open' | 'Investigating' | 'Closed';
   createdBy?: string; // Name of the user who filed this case
+  isConfidential?: boolean; // New flag for sensitive cases
 }
 
 export interface GeneratedReport {
@@ -73,4 +86,21 @@ export interface GeneratedReport {
   actionPlan: string[];
 }
 
-export type ViewState = 'DASHBOARD' | 'NEW_LOG' | 'HISTORY' | 'STUDENT_PROFILE' | 'STUDENTS_DIRECTORY' | 'SAFEGUARDING' | 'REPORTS';
+export interface Desk {
+  id: string;
+  x: number;
+  y: number;
+  rotation: number; // 0, 90, 180, 270
+  studentId?: string; // If null, empty desk
+  type: 'STUDENT' | 'TEACHER' | 'DOOR' | 'BOARD' | 'GROUP_TABLE' | 'RESOURCE';
+}
+
+export interface SeatingLayout {
+  id: string;
+  name: string; // Name of the plan (e.g. "Standard", "Exam Mode")
+  className: string;
+  desks: Desk[];
+  updatedAt: string;
+}
+
+export type ViewState = 'DASHBOARD' | 'NEW_LOG' | 'HISTORY' | 'STUDENT_PROFILE' | 'STUDENTS_DIRECTORY' | 'SAFEGUARDING' | 'REPORTS' | 'BEHAVIOUR' | 'SEATING_PLAN';

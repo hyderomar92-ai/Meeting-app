@@ -1,6 +1,5 @@
-
 import React, { useState, useEffect } from 'react';
-import { ViewState, MeetingLog, MeetingType, SafeguardingCase, UserProfile } from './types';
+import { ViewState, MeetingLog, MeetingType, SafeguardingCase, UserProfile, BehaviourEntry } from './types';
 import Dashboard from './components/Dashboard';
 import MeetingForm from './components/MeetingForm';
 import HistoryView from './components/HistoryView';
@@ -9,7 +8,9 @@ import StudentDirectory from './components/StudentDirectory';
 import SafeguardingBuilder from './components/SafeguardingBuilder';
 import ReportsView from './components/ReportsView';
 import LoginView from './components/LoginView';
-import { LayoutDashboard, PlusCircle, Users, Menu, X, GraduationCap, FileText, BookUser, Shield, FileBarChart, LogOut } from 'lucide-react';
+import BehaviourManager from './components/BehaviourManager';
+import SeatingPlanView from './components/SeatingPlanView';
+import { LayoutDashboard, PlusCircle, Users, Menu, X, GraduationCap, FileText, BookUser, Shield, FileBarChart, LogOut, Star, LayoutGrid } from 'lucide-react';
 import { STUDENTS } from './data/students';
 
 // Update mocks to use real student names from the new data file
@@ -116,7 +117,6 @@ function App() {
   const [logs, setLogs] = useState<MeetingLog[]>(() => {
     try {
       const savedLogs = localStorage.getItem('edulog_data');
-      // Using mocks if empty to ensure demo data works well
       return savedLogs ? JSON.parse(savedLogs) : MOCK_LOGS; 
     } catch (error) {
       console.error('Failed to load logs from storage:', error);
@@ -130,6 +130,15 @@ function App() {
       return savedCases ? JSON.parse(savedCases) : MOCK_SAFEGUARDING_CASES;
     } catch (error) {
       return MOCK_SAFEGUARDING_CASES;
+    }
+  });
+
+  const [behaviourEntries, setBehaviourEntries] = useState<BehaviourEntry[]>(() => {
+    try {
+      const saved = localStorage.getItem('edulog_behaviour');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
     }
   });
   
@@ -146,6 +155,11 @@ function App() {
   useEffect(() => {
     localStorage.setItem('edulog_safeguarding', JSON.stringify(safeguardingCases));
   }, [safeguardingCases]);
+
+  // Save behavior entries
+  useEffect(() => {
+    localStorage.setItem('edulog_behaviour', JSON.stringify(behaviourEntries));
+  }, [behaviourEntries]);
 
   useEffect(() => {
     const handleResize = () => {
@@ -189,12 +203,19 @@ function App() {
     setSafeguardingCases(prev => prev.filter(c => c.id !== id));
   };
 
+  const handleAddBehaviourEntry = (newEntries: BehaviourEntry[]) => {
+    setBehaviourEntries(prev => [...newEntries, ...prev]);
+  };
+
   const handleNavigate = (view: ViewState, studentName?: string) => {
     if (view === 'STUDENT_PROFILE' && studentName) {
       setSelectedStudent(studentName);
     } else if (view === 'NEW_LOG' && studentName) {
        setSelectedStudent(studentName);
-    } else if (view !== 'STUDENT_PROFILE') {
+    } else if (view === 'SAFEGUARDING' && studentName) {
+       // Allow passing student name to safeguarding view to filter list
+       setSelectedStudent(studentName);
+    } else if (view !== 'STUDENT_PROFILE' && view !== 'NEW_LOG' && view !== 'SAFEGUARDING') {
        setSelectedStudent(null);
     }
     setCurrentView(view);
@@ -292,6 +313,8 @@ function App() {
           <NavItem view="NEW_LOG" icon={PlusCircle} label="New Entry" />
           <NavItem view="STUDENTS_DIRECTORY" icon={BookUser} label="Students" />
           <NavItem view="HISTORY" icon={FileText} label="History Logs" />
+          <NavItem view="BEHAVIOUR" icon={Star} label="Behaviour" />
+          <NavItem view="SEATING_PLAN" icon={LayoutGrid} label="Seating Plan" />
           <NavItem view="REPORTS" icon={FileBarChart} label="Reports" />
           <div className="pt-4 mt-4 border-t border-slate-100">
             <p className="px-4 text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Specialized</p>
@@ -335,9 +358,15 @@ function App() {
         </header>
 
         <div className="flex-1 overflow-y-auto p-4 md:p-8 print:p-0 print:overflow-visible">
-          <div className="max-w-5xl mx-auto print:max-w-none">
+          <div className="max-w-5xl mx-auto print:max-w-none h-full">
             {currentView === 'DASHBOARD' && (
-              <Dashboard logs={logs} onNavigate={handleNavigate} currentUser={currentUser} />
+              <Dashboard 
+                logs={logs} 
+                safeguardingCases={safeguardingCases}
+                behaviourEntries={behaviourEntries}
+                onNavigate={handleNavigate} 
+                currentUser={currentUser} 
+              />
             )}
             
             {currentView === 'NEW_LOG' && (
@@ -363,6 +392,18 @@ function App() {
               />
             )}
 
+            {currentView === 'BEHAVIOUR' && (
+              <BehaviourManager 
+                currentUser={currentUser} 
+                entries={behaviourEntries}
+                onAddEntries={handleAddBehaviourEntry}
+              />
+            )}
+
+            {currentView === 'SEATING_PLAN' && (
+              <SeatingPlanView />
+            )}
+
             {currentView === 'REPORTS' && (
               <ReportsView 
                 logs={logs}
@@ -373,11 +414,14 @@ function App() {
             {currentView === 'STUDENT_PROFILE' && selectedStudent && (
               <StudentProfile 
                 studentName={selectedStudent} 
-                logs={logs} 
+                logs={logs}
+                behaviourEntries={behaviourEntries}
+                safeguardingCases={safeguardingCases}
                 onBack={() => handleNavigate('STUDENTS_DIRECTORY')}
                 onToggleActionItem={handleToggleActionItem}
                 onMarkAllCompleted={handleMarkAllActionsCompleted}
                 onQuickLog={(name) => handleNavigate('NEW_LOG', name)}
+                onViewSafeguarding={(name) => handleNavigate('SAFEGUARDING', name)}
               />
             )}
 
@@ -389,6 +433,7 @@ function App() {
                 onDelete={handleDeleteSafeguardingCase}
                 onCancel={() => handleNavigate('DASHBOARD')}
                 currentUser={currentUser}
+                initialSearchTerm={selectedStudent || ''}
               />
             )}
           </div>

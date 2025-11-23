@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { UserProfile } from '../types';
-import { User, Shield, GraduationCap, Briefcase, Plus, X, Save } from 'lucide-react';
+import { User, Shield, GraduationCap, Briefcase, Plus, X, Save, Settings, Trash2, Edit2, ArrowLeft } from 'lucide-react';
 
 const DEFAULT_USERS: UserProfile[] = [
   { id: 'u1', name: 'Jane Doe', role: 'Head of Year', initials: 'JD' },
@@ -14,6 +14,8 @@ interface LoginViewProps {
   onLogin: (user: UserProfile) => void;
 }
 
+type LoginMode = 'SELECT' | 'MANAGE' | 'ADD' | 'EDIT';
+
 const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
   const [users, setUsers] = useState<UserProfile[]>(() => {
     try {
@@ -24,36 +26,78 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
     }
   });
 
-  const [isAddingUser, setIsAddingUser] = useState(false);
-  const [newUserName, setNewUserName] = useState('');
-  const [newUserRole, setNewUserRole] = useState<UserProfile['role']>('Teacher');
+  const [mode, setMode] = useState<LoginMode>('SELECT');
+  const [editingId, setEditingId] = useState<string | null>(null);
 
+  // Form State
+  const [userName, setUserName] = useState('');
+  const [userRole, setUserRole] = useState<UserProfile['role']>('Teacher');
+
+  // Persist users to local storage whenever the list changes
   useEffect(() => {
     localStorage.setItem('edulog_users', JSON.stringify(users));
   }, [users]);
 
-  const handleAddUser = (e: React.FormEvent) => {
+  const handleSaveUser = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newUserName.trim()) return;
+    if (!userName.trim()) return;
 
-    const initials = newUserName
+    const initials = userName
       .split(' ')
       .map(n => n[0])
       .join('')
       .toUpperCase()
       .slice(0, 2);
 
-    const newUser: UserProfile = {
-      id: crypto.randomUUID(),
-      name: newUserName,
-      role: newUserRole,
-      initials
-    };
+    if (mode === 'ADD') {
+      const newUser: UserProfile = {
+        id: crypto.randomUUID(),
+        name: userName,
+        role: userRole,
+        initials
+      };
+      setUsers([...users, newUser]);
+    } else if (mode === 'EDIT' && editingId) {
+      const updatedUsers = users.map(u => u.id === editingId ? {
+        ...u,
+        name: userName,
+        role: userRole,
+        initials
+      } : u);
+      setUsers(updatedUsers);
+    }
 
-    setUsers([...users, newUser]);
-    setIsAddingUser(false);
-    setNewUserName('');
-    setNewUserRole('Teacher');
+    resetForm();
+  };
+
+  const startEdit = (user: UserProfile) => {
+    setEditingId(user.id);
+    setUserName(user.name);
+    setUserRole(user.role);
+    setMode('EDIT');
+  };
+
+  const handleDelete = (id: string) => {
+    if (window.confirm("Are you sure you want to permanently delete this user profile?")) {
+      const newUsers = users.filter(u => u.id !== id);
+      setUsers(newUsers);
+      if (newUsers.length === 0) setMode('ADD'); // Force add if list is empty
+    }
+  };
+
+  const resetForm = () => {
+    setMode('SELECT');
+    setUserName('');
+    setUserRole('Teacher');
+    setEditingId(null);
+  };
+
+  const renderRoleIcon = (role: string) => {
+      switch(role) {
+          case 'DSL': return <Shield size={12} className="mr-1" />;
+          case 'Head of Year': return <Briefcase size={12} className="mr-1" />;
+          default: return <User size={12} className="mr-1" />;
+      }
   };
 
   return (
@@ -66,85 +110,126 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
         <p className="text-slate-500 mt-2">AI-Powered Educational Documentation</p>
       </div>
 
-      <div className="bg-white p-8 rounded-2xl shadow-xl border border-slate-100 max-w-md w-full animate-slide-up relative overflow-hidden">
+      <div className="bg-white p-8 rounded-2xl shadow-xl border border-slate-100 max-w-md w-full animate-slide-up relative overflow-hidden transition-all duration-300">
         
-        {!isAddingUser ? (
-          <>
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-lg font-semibold text-slate-800">Select User Account</h2>
-              <button 
-                onClick={() => setIsAddingUser(true)}
-                className="text-xs flex items-center text-blue-600 hover:text-blue-700 font-medium"
-              >
-                <Plus size={14} className="mr-1" /> Add User
-              </button>
-            </div>
-            
-            <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1">
+        {/* HEADER */}
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-lg font-semibold text-slate-800">
+            {mode === 'SELECT' ? 'Select Account' : 
+             mode === 'MANAGE' ? 'Manage Profiles' :
+             mode === 'ADD' ? 'Create Profile' : 'Edit Profile'}
+          </h2>
+          
+          <div className="flex space-x-2">
+            {mode === 'SELECT' && (
+               <>
+                 <button 
+                    onClick={() => setMode('MANAGE')}
+                    className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-lg transition-colors"
+                    title="Manage Users"
+                 >
+                    <Settings size={18} />
+                 </button>
+                 <button 
+                    onClick={() => { setMode('ADD'); setUserName(''); setUserRole('Teacher'); }}
+                    className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors font-medium flex items-center"
+                    title="Add User"
+                 >
+                    <Plus size={18} />
+                 </button>
+               </>
+            )}
+            {(mode === 'MANAGE' || mode === 'ADD' || mode === 'EDIT') && (
+                 <button 
+                    onClick={resetForm}
+                    className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-lg transition-colors"
+                 >
+                    <X size={18} />
+                 </button>
+            )}
+          </div>
+        </div>
+        
+        {/* LIST VIEW (SELECT & MANAGE) */}
+        {(mode === 'SELECT' || mode === 'MANAGE') && (
+            <div className="space-y-3 max-h-[350px] overflow-y-auto pr-1 custom-scrollbar">
+              {users.length === 0 && (
+                  <div className="text-center py-8 text-slate-400">
+                      <User size={32} className="mx-auto mb-2 opacity-20" />
+                      <p className="text-sm">No profiles found.</p>
+                      <button onClick={() => setMode('ADD')} className="mt-2 text-blue-600 text-sm font-medium hover:underline">Create First User</button>
+                  </div>
+              )}
               {users.map((user) => (
-                <button
+                <div
                   key={user.id}
-                  onClick={() => onLogin(user)}
-                  className="w-full flex items-center p-3 rounded-xl hover:bg-slate-50 border border-transparent hover:border-blue-200 transition-all group"
+                  onClick={() => mode === 'SELECT' && onLogin(user)}
+                  className={`w-full flex items-center p-3 rounded-xl border transition-all group relative ${
+                      mode === 'SELECT' 
+                        ? 'hover:bg-slate-50 border-transparent hover:border-blue-200 cursor-pointer' 
+                        : 'bg-white border-slate-100'
+                  }`}
                 >
-                  <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold mr-4 transition-colors ${
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold mr-4 transition-colors flex-shrink-0 ${
                     user.role === 'DSL' ? 'bg-red-100 text-red-600 group-hover:bg-red-200' : 
                     user.role === 'Head of Year' ? 'bg-indigo-100 text-indigo-600 group-hover:bg-indigo-200' :
                     'bg-blue-100 text-blue-600 group-hover:bg-blue-200'
                   }`}>
                     {user.initials}
                   </div>
-                  <div className="text-left flex-1">
-                    <p className="text-slate-800 font-medium group-hover:text-blue-700">{user.name}</p>
+                  <div className="text-left flex-1 min-w-0">
+                    <p className="text-slate-800 font-medium group-hover:text-blue-700 truncate">{user.name}</p>
                     <div className="flex items-center text-xs text-slate-500">
-                      {user.role === 'DSL' && <Shield size={12} className="mr-1" />}
-                      {user.role === 'Head of Year' && <Briefcase size={12} className="mr-1" />}
-                      {user.role === 'Teacher' && <User size={12} className="mr-1" />}
+                      {renderRoleIcon(user.role)}
                       {user.role}
                     </div>
                   </div>
-                </button>
+
+                  {/* Manage Actions */}
+                  {mode === 'MANAGE' && (
+                      <div className="flex items-center space-x-1 pl-2 animate-fade-in">
+                          <button 
+                             onClick={(e) => { e.stopPropagation(); startEdit(user); }}
+                             className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                          >
+                             <Edit2 size={16} />
+                          </button>
+                          <button 
+                             onClick={(e) => { e.stopPropagation(); handleDelete(user.id); }}
+                             className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                          >
+                             <Trash2 size={16} />
+                          </button>
+                      </div>
+                  )}
+                </div>
               ))}
             </div>
+        )}
 
-            <div className="mt-8 pt-6 border-t border-slate-100 text-center">
-              <p className="text-xs text-slate-400">
-                Secure Access • 256-bit Encryption • GDPR Compliant
-              </p>
-            </div>
-          </>
-        ) : (
-          <form onSubmit={handleAddUser} className="animate-fade-in">
-             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-lg font-semibold text-slate-800">New User Profile</h2>
-              <button 
-                type="button"
-                onClick={() => setIsAddingUser(false)}
-                className="text-slate-400 hover:text-slate-600"
-              >
-                <X size={20} />
-              </button>
-            </div>
-
+        {/* FORM VIEW (ADD & EDIT) */}
+        {(mode === 'ADD' || mode === 'EDIT') && (
+          <form onSubmit={handleSaveUser} className="animate-fade-in">
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Full Name</label>
                 <input 
                   type="text" 
-                  value={newUserName}
-                  onChange={(e) => setNewUserName(e.target.value)}
-                  className="w-full px-4 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none"
+                  value={userName}
+                  onChange={(e) => setUserName(e.target.value)}
+                  className="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none transition-all"
                   placeholder="e.g. Alice Johnson"
                   required
+                  autoFocus
                 />
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Role</label>
                 <select
-                  value={newUserRole}
-                  onChange={(e) => setNewUserRole(e.target.value as any)}
-                  className="w-full px-4 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none bg-white"
+                  value={userRole}
+                  onChange={(e) => setUserRole(e.target.value as any)}
+                  className="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none bg-white transition-all cursor-pointer"
                 >
                   <option value="Teacher">Teacher</option>
                   <option value="Head of Year">Head of Year</option>
@@ -153,17 +238,32 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
                 </select>
               </div>
 
-              <div className="pt-4">
+              <div className="pt-4 flex gap-3">
+                 <button 
+                  type="button"
+                  onClick={resetForm}
+                  className="flex-1 py-2.5 border border-slate-300 text-slate-700 rounded-lg font-medium hover:bg-slate-50 transition-all"
+                >
+                  Cancel
+                </button>
                 <button 
                   type="submit"
-                  className="w-full py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 shadow-lg shadow-blue-200 transition-all flex items-center justify-center"
+                  className="flex-[2] py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 shadow-lg shadow-blue-200 transition-all flex items-center justify-center"
                 >
                   <Save size={18} className="mr-2" />
-                  Create Profile
+                  {mode === 'ADD' ? 'Create Profile' : 'Save Changes'}
                 </button>
               </div>
             </div>
           </form>
+        )}
+
+        {mode === 'SELECT' && (
+            <div className="mt-8 pt-6 border-t border-slate-100 text-center">
+              <p className="text-xs text-slate-400">
+                Secure Access • 256-bit Encryption • GDPR Compliant
+              </p>
+            </div>
         )}
       </div>
     </div>
