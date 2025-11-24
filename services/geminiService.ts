@@ -1,12 +1,64 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
-import { MeetingLog, SafeguardingCase } from "../types";
+import { MeetingLog, SafeguardingCase, BehaviourEntry, RiskAlert, StudentStats } from "../types";
+import { STUDENTS } from "../data/students";
 
 // Ideally, this service handles all AI interactions.
 // We use gemini-2.5-flash for speed and efficiency in text processing.
 
 const apiKey = process.env.API_KEY || '';
 const ai = new GoogleGenAI({ apiKey });
+
+// Helper to reliably parse JSON from AI responses which might include Markdown code blocks
+const cleanAndParseJSON = (text: string): any => {
+  if (!text) throw new Error("Empty response from AI");
+  try {
+    let clean = text.trim();
+    // Remove markdown code blocks if present
+    clean = clean.replace(/```json\s*/g, '').replace(/```\s*/g, '');
+    
+    // Find the first '{' or '[' and the last '}' or ']' to handle extra text
+    const firstBrace = clean.indexOf('{');
+    const firstBracket = clean.indexOf('[');
+    
+    let startIdx = -1;
+    if (firstBrace !== -1 && firstBracket !== -1) {
+        startIdx = Math.min(firstBrace, firstBracket);
+    } else if (firstBrace !== -1) {
+        startIdx = firstBrace;
+    } else if (firstBracket !== -1) {
+        startIdx = firstBracket;
+    }
+
+    if (startIdx !== -1) {
+        const lastBrace = clean.lastIndexOf('}');
+        const lastBracket = clean.lastIndexOf(']');
+        const endIdx = Math.max(lastBrace, lastBracket);
+        if (endIdx > startIdx) {
+            clean = clean.substring(startIdx, endIdx + 1);
+        }
+    }
+
+    return JSON.parse(clean);
+  } catch (e) {
+    console.error("JSON Parse Error:", e);
+    console.log("Raw text was:", text);
+    throw new Error("Failed to parse AI response. The model may have returned invalid JSON.");
+  }
+};
+
+export interface LogAnalysisResponse {
+  summary: string;
+  actionItems: string[];
+  sentiment: 'Positive' | 'Neutral' | 'Concerned';
+  detectedAttendees: string[];
+  location: string;
+  safeguarding: {
+    flagged: boolean;
+    reason?: string;
+    riskLevel?: 'Low' | 'Medium' | 'High' | 'Critical';
+  };
+}
 
 export interface EnhancedNotesResponse {
   summary: string;
@@ -36,10 +88,86 @@ export interface GeneratedReportResponse {
   actionPlan: string[];
 }
 
-export const enhanceMeetingNotes = async (rawNotes: string): Promise<EnhancedNotesResponse> => {
-  // Fallback immediately if no key (development mode safety)
+export interface CertificateResponse {
+    title: string;
+    message: string;
+    awardType: string;
+}
+
+export const analyzeLogEntry = async (rawNotes: string, language: string = 'en'): Promise<LogAnalysisResponse> => {
+    if (!apiKey) {
+         return {
+            summary: rawNotes,
+            actionItems: [],
+            sentiment: 'Neutral',
+            detectedAttendees: [],
+            location: 'Unknown',
+            safeguarding: { flagged: false }
+        };
+    }
+
+    const studentNames = STUDENTS.map(s => s.name).join(', ');
+
+    try {
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: `
+            Analyze the following meeting/observation notes for a school context.
+
+            NOTES:
+            "${rawNotes}"
+
+            KNOWN STUDENTS LIST:
+            [${studentNames}]
+
+            TASKS:
+            1. **Identify Attendees**: Extract names of students mentioned. Match loosely against the "KNOWN STUDENTS LIST" if possible.
+            2. **Summarize**: Create a concise summary in ${language}.
+            3. **Action Items**: Extract actionable tasks in ${language}.
+            4. **Sentiment**: 'Positive', 'Neutral', or 'Concerned'.
+            5. **Location**: Infer the location (e.g., Classroom, Playground) if mentioned or implied.
+            6. **Safeguarding Scan**: CRITICAL. Detect if this entry describes bullying, abuse, neglect, radicalization, or serious behavioral incidents. 
+               - Set 'flagged' to true if ANY risk is detected.
+               - Assign a 'riskLevel' (Low/Medium/High/Critical).
+               - Provide a short 'reason' for the flag.
+
+            Output strictly JSON.
+            `,
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: Type.OBJECT,
+                    properties: {
+                        summary: { type: Type.STRING },
+                        actionItems: { type: Type.ARRAY, items: { type: Type.STRING } },
+                        sentiment: { type: Type.STRING, enum: ["Positive", "Neutral", "Concerned"] },
+                        detectedAttendees: { type: Type.ARRAY, items: { type: Type.STRING } },
+                        location: { type: Type.STRING },
+                        safeguarding: {
+                            type: Type.OBJECT,
+                            properties: {
+                                flagged: { type: Type.BOOLEAN },
+                                reason: { type: Type.STRING },
+                                riskLevel: { type: Type.STRING, enum: ["Low", "Medium", "High", "Critical"] }
+                            },
+                            required: ["flagged"]
+                        }
+                    }
+                }
+            }
+        });
+
+        const text = response.text;
+        if (!text) throw new Error("No response from AI");
+        return cleanAndParseJSON(text) as LogAnalysisResponse;
+    } catch (e) {
+        console.error("Analysis Error:", e);
+        throw new Error("Unable to analyze notes. Please try again.");
+    }
+};
+
+export const enhanceMeetingNotes = async (rawNotes: string, language: string = 'en'): Promise<EnhancedNotesResponse> => {
   if (!apiKey) {
-    console.warn("No API Key provided for Gemini. Using fallback.");
     return {
       summary: rawNotes,
       actionItems: ["(AI Unavailable) Review notes manually."],
@@ -54,8 +182,8 @@ export const enhanceMeetingNotes = async (rawNotes: string): Promise<EnhancedNot
       
       "${rawNotes}"
 
-      1. **Summary**: Create a professional, concise summary of the interaction.
-      2. **Action Items**: Extract any explicit tasks mentioned. **CRITICAL**: If no specific tasks are written, SUGGEST 2-3 logical, professional follow-up steps the teacher should take based on the context (e.g., "Schedule follow-up meeting", "Send progress report to parents", "Monitor attendance for next week").
+      1. **Summary**: Create a professional, concise summary of the interaction in ${language}.
+      2. **Action Items**: Extract extracted tasks or suggest 2-3 logical follow-up steps in ${language}.
       3. **Sentiment**: Determine if the tone is Positive, Neutral, or Concerned.`,
       config: {
         responseMimeType: "application/json",
@@ -82,31 +210,59 @@ export const enhanceMeetingNotes = async (rawNotes: string): Promise<EnhancedNot
     const text = response.text;
     if (!text) throw new Error("No response text from AI");
     
-    return JSON.parse(text) as EnhancedNotesResponse;
+    return cleanAndParseJSON(text) as EnhancedNotesResponse;
   } catch (error) {
     console.error("Error enhancing notes:", error);
-    // Graceful fallback to prevent UI crash
-    return {
-      summary: rawNotes, // Use original notes as summary
-      actionItems: ["Could not generate action items. Please add manually."],
-      sentiment: 'Neutral'
-    };
+    throw new Error("Failed to enhance notes.");
+  }
+};
+
+export const generateSmartActions = async (notes: string, language: string = 'en'): Promise<string[]> => {
+  if (!apiKey) return ["Review notes and define next steps", "Follow up with student in 1 week"];
+
+  try {
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: `
+        Analyze the following meeting notes and generate a list of 4-6 specific, actionable, and distinct "SMART" (Specific, Measurable, Achievable, Relevant, Time-bound) action items.
+        
+        The actions should be practical next steps for the teacher, parent, or student.
+        Output ONLY a JSON array of strings.
+        Output Language: ${language}
+
+        NOTES:
+        "${notes}"
+      `,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.ARRAY,
+          items: { type: Type.STRING }
+        }
+      }
+    });
+
+    const text = response.text;
+    if (!text) return [];
+    return cleanAndParseJSON(text) as string[];
+  } catch (e) {
+    console.error("Action gen error", e);
+    throw new Error("Failed to generate smart actions.");
   }
 };
 
 export const generateSafeguardingReport = async (
   studentName: string, 
   description: string,
-  evidenceLogs: MeetingLog[] = []
+  evidenceLogs: MeetingLog[] = [],
+  language: string = 'en'
 ): Promise<SafeguardingReportResponse> => {
   
-  // Format evidence for the prompt
   const evidenceContext = evidenceLogs.map(l => 
     `[LOG DATE: ${l.date} | TYPE: ${l.type}] Notes: ${l.notes} (Sentiment: ${l.sentiment})`
   ).join('\n');
 
   if (!apiKey) {
-    console.warn("No API Key provided for Gemini.");
     return {
       dslSummary: `Manual Entry for ${studentName}: ${description.substring(0, 50)}...`,
       chronology: ["Incident recorded"],
@@ -133,13 +289,13 @@ export const generateSafeguardingReport = async (
       ATTACHED EVIDENCE (Past Logs & Interactions):
       ${evidenceContext || "No past logs attached."}
 
-      Generate a formal Safeguarding & Behaviour Case File.
+      Generate a formal Safeguarding & Behaviour Case File. IMPORTANT: Output all text fields in ${language} language.
       1. **DSL Summary**: Professional, objective summary suitable for a legal file.
       2. **Chronology**: Extract a timeline of events from the current incident.
       3. **Key Evidence**: Analyze the "Attached Evidence" and the current description. List specific quotes, dates of previous behavior, or patterns that substantiate this case.
-      4. **Evidence Analysis**: Synthesize the key evidence. Are there specific recurring patterns (e.g. "happens every Monday", "always during Math")? Is the behavior escalating in severity? Is it isolated? Provide a concise analytical paragraph highlighting these trends.
-      5. **Policies Applied**: List standard school policies relevant to this incident (e.g., Anti-Bullying, Physical Intervention, Peer-on-Peer Abuse, Online Safety, Attendance Policy).
-      6. **Witness Questions**: Draft 3-5 specific, non-leading questions to ask witnesses to investigate further.
+      4. **Evidence Analysis**: Synthesize the key evidence. Are there specific recurring patterns?
+      5. **Policies Applied**: List standard school policies relevant to this incident.
+      6. **Witness Questions**: Draft 3-5 specific, non-leading questions to ask witnesses.
       7. **Next Steps**: Provide immediate and long-term actions required.
       8. **Risk Level**: Assess risk based on the description and any escalating patterns in the evidence.
       9. **Sentiment**: Analyze the urgency.`,
@@ -150,8 +306,8 @@ export const generateSafeguardingReport = async (
           properties: {
             dslSummary: { type: Type.STRING },
             chronology: { type: Type.ARRAY, items: { type: Type.STRING } },
-            keyEvidence: { type: Type.ARRAY, items: { type: Type.STRING }, description: "List of specific facts, quotes, or patterns that serve as evidence." },
-            evidenceAnalysis: { type: Type.STRING, description: "Analysis of patterns, frequency, triggers, or escalation based on the evidence." },
+            keyEvidence: { type: Type.ARRAY, items: { type: Type.STRING } },
+            evidenceAnalysis: { type: Type.STRING },
             policiesApplied: { type: Type.ARRAY, items: { type: Type.STRING } },
             witnessQuestions: { type: Type.ARRAY, items: { type: Type.STRING } },
             nextSteps: { type: Type.ARRAY, items: { type: Type.STRING } },
@@ -165,21 +321,10 @@ export const generateSafeguardingReport = async (
     const text = response.text;
     if (!text) throw new Error("No response text from AI");
 
-    return JSON.parse(text) as SafeguardingReportResponse;
+    return cleanAndParseJSON(text) as SafeguardingReportResponse;
   } catch (error) {
     console.error("Error generating safeguarding report:", error);
-    // Graceful fallback
-    return {
-      dslSummary: "System Error: Could not generate AI report. Please complete manually.",
-      chronology: ["Incident occurred"],
-      keyEvidence: ["System Error"],
-      evidenceAnalysis: "System Error",
-      policiesApplied: ["Check School Policy"],
-      witnessQuestions: ["N/A"],
-      nextSteps: ["Manual Review Required"],
-      riskLevel: 'Medium',
-      sentiment: 'Serious'
-    };
+    throw new Error("Failed to generate safeguarding report.");
   }
 };
 
@@ -191,7 +336,8 @@ export const generateComprehensiveReport = async (
   startDate: string,
   endDate: string,
   studentProfile?: any,
-  audience: 'PARENTS' | 'SLT' | 'DSL' | 'TEACHER' | 'EXTERNAL' = 'PARENTS'
+  audience: 'PARENTS' | 'SLT' | 'DSL' | 'TEACHER' | 'EXTERNAL' = 'PARENTS',
+  language: string = 'en'
 ): Promise<GeneratedReportResponse> => {
 
   const contextData = logs.map(l => `Date: ${l.date}, Type: ${l.type}, Notes: ${l.notes}, Outcome/Sentiment: ${l.sentiment}`).join('\n');
@@ -204,26 +350,22 @@ export const generateComprehensiveReport = async (
       Name: ${studentProfile.name}
       Class: ${studentProfile.studentClass || "N/A"}
       ID: ${studentProfile.id}
-      Nationality: ${studentProfile.nationality || "N/A"}
-      Parent/Guardian: ${studentProfile.fatherName || studentProfile.motherName || "Unknown"}
-      Contact: ${studentProfile.fatherEmail || studentProfile.motherEmail || "N/A"}
       `;
   }
 
-  // Audience Instructions
   const audienceInstructions = {
-    'PARENTS': `Tone: Professional but accessible, supportive, partnership-oriented. Avoid internal jargon. Focus on wellbeing, progress, social development, and how the home can support the school. Highlight strengths warmly.`,
-    'SLT': `Tone: Formal, concise, data-driven, executive. Focus on attainment, attendance stats, behavioral trends, and high-level strategic interventions. Minimize fluff.`,
-    'DSL': `Tone: Strictly formal, objective, factual, legalistic. Focus on risk levels, specific chronology of incidents, disclosure details, and compliance with statutory frameworks.`,
-    'TEACHER': `Tone: Professional, practical, collaborative. Focus on classroom strategies, specific learning gaps, behavioral triggers, and peer-to-peer advice.`,
-    'EXTERNAL': `Tone: Formal, objective, detached. Focus on factual history, support needs, and inter-agency cooperation requirements.`,
+    'PARENTS': `Tone: Professional but accessible, supportive, partnership-oriented.`,
+    'SLT': `Tone: Formal, concise, data-driven, executive.`,
+    'DSL': `Tone: Strictly formal, objective, factual, legalistic.`,
+    'TEACHER': `Tone: Professional, practical, collaborative.`,
+    'EXTERNAL': `Tone: Formal, objective, detached.`,
   };
 
   if (!apiKey) {
     return {
       title: `${type === 'STUDENT' ? 'Student' : 'Class'} Progress Report`,
       period: `${startDate} to ${endDate}`,
-      executiveSummary: "Demo Mode: API Key missing. This represents a summary of interactions.",
+      executiveSummary: "Demo Mode: API Key missing.",
       keyStrengths: ["Participation", "Attendance"],
       areasForGrowth: ["Homework submission"],
       attendanceTrend: "Consistent",
@@ -237,26 +379,27 @@ export const generateComprehensiveReport = async (
       
       **TARGET AUDIENCE**: ${audience}
       **AUDIENCE INSTRUCTION**: ${audienceInstructions[audience]}
+      **OUTPUT LANGUAGE**: ${language}
 
       Report Subject: ${type === 'STUDENT' ? `Individual Student Report for ${name}` : `Class/General Report for ${name}`}
       Period: ${startDate} to ${endDate}
       
       ${profileContext}
 
-      Based ONLY on the provided interaction logs and safeguarding records, generate a comprehensive report tailored specifically for the target audience.
+      Based ONLY on the provided interaction logs and safeguarding records, generate a comprehensive report.
       
-      Interaction Logs (Filtered):
+      Interaction Logs:
       ${contextData.length > 0 ? contextData : "No specific meeting logs found matching the filter criteria."}
 
-      Safeguarding/Behavioral Incidents (If applicable):
+      Safeguarding/Behavioral Incidents:
       ${safetyData.length > 0 ? safetyData : "No safeguarding incidents recorded in this period."}
 
-      Tasks:
-      1. **Executive Summary**: A paragraph summarizing the progress/behavior/engagement. Tone must match the audience.
+      Tasks (Respond in ${language}):
+      1. **Executive Summary**: A paragraph summarizing the progress/behavior/engagement.
       2. **Key Strengths**: List 3-4 positive observations.
-      3. **Areas for Growth**: List 2-3 specific areas needing improvement or attention.
-      4. **Attendance/Engagement Trend**: One word or short phrase (e.g., "Improving", "Inconsistent", "Excellent").
-      5. **Action Plan**: 3-4 concrete, actionable recommendations appropriate for the specific audience to read.
+      3. **Areas for Growth**: List 2-3 specific areas needing improvement.
+      4. **Attendance/Engagement Trend**: One word or short phrase.
+      5. **Action Plan**: 3-4 concrete, actionable recommendations.
     `;
 
     const response = await ai.models.generateContent({
@@ -282,17 +425,194 @@ export const generateComprehensiveReport = async (
     const text = response.text;
     if (!text) throw new Error("No response text from AI");
     
-    return JSON.parse(text) as GeneratedReportResponse;
+    return cleanAndParseJSON(text) as GeneratedReportResponse;
   } catch (error) {
     console.error("Error generating report:", error);
-     return {
-      title: "Report Generation Failed",
-      period: `${startDate} to ${endDate}`,
-      executiveSummary: "An error occurred while communicating with the AI service.",
-      keyStrengths: [],
-      areasForGrowth: [],
-      attendanceTrend: "Unknown",
-      actionPlan: ["Try again later"]
-    };
+    throw new Error("Failed to generate comprehensive report.");
   }
 };
+
+export const scanForRisks = async (logs: MeetingLog[], behavior: BehaviourEntry[], language: string = 'en'): Promise<RiskAlert[]> => {
+    if (!apiKey) return [];
+
+    const studentMap = new Map<string, string[]>();
+    const recentLogs = logs.slice(0, 50); 
+    
+    recentLogs.forEach(l => {
+        l.attendees.forEach(s => {
+            if(!studentMap.has(s)) studentMap.set(s, []);
+            studentMap.get(s)?.push(`LOG [${l.date}]: (${l.sentiment}) ${l.notes}`);
+        });
+    });
+
+    behavior.slice(0, 50).forEach(b => {
+        if(!studentMap.has(b.studentName)) studentMap.set(b.studentName, []);
+        studentMap.get(b.studentName)?.push(`BEHAVIOR [${b.date}]: (${b.type}) ${b.category} - ${b.description || ''}`);
+    });
+
+    let context = "";
+    studentMap.forEach((history, name) => {
+        if(history.length > 1) { 
+             context += `\nSTUDENT: ${name}\n${history.join('\n')}\n`;
+        }
+    });
+
+    if (!context) return [];
+
+    try {
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: `
+            Analyze the following student interaction logs and behavior entries.
+            Identify students exhibiting "emerging risks" based on patterns like:
+            - Social isolation or withdrawal
+            - Spikes in negative sentiment
+            - escalating behavioral sanctions
+            - sudden drop in engagement
+
+            Return a JSON array of students with a risk score > 50.
+            The 'riskFactor', 'details', and 'suggestedIntervention' fields must be in ${language}.
+            
+            DATA:
+            ${context}
+            `,
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: Type.ARRAY,
+                    items: {
+                        type: Type.OBJECT,
+                        properties: {
+                            studentName: { type: Type.STRING },
+                            riskScore: { type: Type.NUMBER, description: "Risk score from 0 to 100" },
+                            riskFactor: { type: Type.STRING, description: "Short title of the risk factor" },
+                            details: { type: Type.STRING, description: "One sentence explanation of the pattern" },
+                            suggestedIntervention: { type: Type.STRING, description: "One sentence suggested intervention" }
+                        }
+                    }
+                }
+            }
+        });
+
+        const text = response.text;
+        if (!text) throw new Error("No response text from AI");
+        return cleanAndParseJSON(text) as RiskAlert[];
+    } catch (e) {
+        console.error("Sentinel Scan Failed", e);
+        throw new Error("Sentinel scan failed to complete.");
+    }
+}
+
+export const querySentinel = async (
+    query: string,
+    dataContext: {
+        logs: MeetingLog[];
+        safeguarding: SafeguardingCase[];
+        behavior: BehaviourEntry[];
+    },
+    language: string = 'en'
+): Promise<string> => {
+    if (!apiKey) return "Sentinel Intelligence is unavailable in demo mode (Missing API Key).";
+
+    const logsSummary = dataContext.logs.slice(0, 30).map(l => 
+        `- ${l.date} (${l.type}): ${l.notes.substring(0, 100)}... [Attendees: ${l.attendees.join(', ')}]`
+    ).join('\n');
+
+    const safetySummary = dataContext.safeguarding.map(s => 
+        `- CASE ${s.id}: ${s.studentName} - ${s.incidentType} (Status: ${s.status}, Risk: ${s.generatedReport.riskLevel})`
+    ).join('\n');
+
+    const behaviorStats: Record<string, number> = {};
+    dataContext.behavior.forEach(b => {
+        behaviorStats[b.studentName] = (behaviorStats[b.studentName] || 0) + b.points;
+    });
+    const behaviorSummary = Object.entries(behaviorStats)
+        .map(([name, points]) => `${name}: ${points} pts`)
+        .join(', ');
+
+    try {
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: `
+            You are "Sentinel", an intelligent assistant for a school safeguarding and education platform.
+            
+            Current System Data:
+            [RECENT LOGS]
+            ${logsSummary || "No recent logs."}
+
+            [SAFEGUARDING]
+            ${safetySummary || "No active cases."}
+
+            [BEHAVIOR]
+            ${behaviorSummary || "No behavior data."}
+
+            USER QUERY: "${query}"
+
+            Instructions:
+            1. Answer the user's question based strictly on the data provided.
+            2. Be professional, concise, and helpful.
+            3. Answer in the following language: ${language}.
+            4. If the data is not available, state so clearly in ${language}.
+            `,
+        });
+
+        return response.text || "I processed the data but couldn't generate a text response.";
+    } catch (e) {
+        console.error("Sentinel Chat Error", e);
+        throw new Error("Sentinel is currently offline.");
+    }
+};
+
+export const generateCertificateContent = async (
+    studentName: string,
+    positiveLogs: string[],
+    merits: string[],
+    language: string = 'en'
+): Promise<CertificateResponse> => {
+     if (!apiKey) return {
+         title: "Certificate of Excellence",
+         message: `Congratulations to ${studentName} for their outstanding performance. Keep up the great work!`,
+         awardType: "General Excellence"
+     };
+
+     try {
+         const response = await ai.models.generateContent({
+             model: "gemini-2.5-flash",
+             contents: `
+             Generate content for a school "Certificate of Praise" for student: ${studentName}.
+             
+             Context of their success:
+             POSITIVE LOGS:
+             ${positiveLogs.join('\n')}
+
+             BEHAVIOR MERITS:
+             ${merits.join('\n')}
+
+             Language: ${language}
+
+             Tasks:
+             1. Create a catchy 'title' (e.g. "Star of the Week", "Resilience Award").
+             2. Write a short, inspiring 'message' (2-3 sentences) specifically mentioning why they are receiving this, referencing the context provided.
+             3. Define an 'awardType' (e.g. Academic, Behavioral, Leadership).
+             `,
+             config: {
+                 responseMimeType: "application/json",
+                 responseSchema: {
+                     type: Type.OBJECT,
+                     properties: {
+                         title: { type: Type.STRING },
+                         message: { type: Type.STRING },
+                         awardType: { type: Type.STRING }
+                     }
+                 }
+             }
+         });
+         
+         const text = response.text;
+         if(!text) throw new Error("No response");
+         return cleanAndParseJSON(text) as CertificateResponse;
+     } catch (e) {
+         console.error("Certificate Generation Error", e);
+         throw new Error("Failed to generate certificate.");
+     }
+}

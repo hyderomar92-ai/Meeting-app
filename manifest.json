@@ -1,7 +1,7 @@
 {
-  "short_name": "EduLog",
-  "name": "EduLog Pro: Educator Notes",
-  "description": "Track student interactions and meetings.",
+  "short_name": "Sentinel",
+  "name": "Sentinel: Predictive Safeguarding",
+  "description": "AI-powered safeguarding and student interaction tracking.",
   "icons": [
     {
       "src": "https://cdn-icons-png.flaticon.com/512/2997/2997495.png",
@@ -16,6 +16,6 @@
   ],
   "start_url": ".",
   "display": "standalone",
-  "theme_color": "#2563eb",
-  "background_color": "#ffffff"
+  "theme_color": "#0f172a",
+  "background_color": "#0f172a"
 }

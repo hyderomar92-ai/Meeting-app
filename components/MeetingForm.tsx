@@ -1,15 +1,17 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { MeetingType, MeetingLog, ActionItem, UserProfile } from '../types';
-import { enhanceMeetingNotes } from '../services/geminiService';
-import { Sparkles, Save, X, Plus, Trash2, Loader2, User, AlertCircle, Mic, MicOff, FileText, Quote } from 'lucide-react';
+import { analyzeLogEntry, generateSmartActions } from '../services/geminiService';
+import { Sparkles, Save, X, Plus, Loader2, User, AlertCircle, Mic, MicOff, FileText, Zap, ShieldAlert, ArrowRight } from 'lucide-react';
 import { STUDENTS } from '../data/students';
+import { useLanguage } from '../contexts/LanguageContext';
 
 interface MeetingFormProps {
   onSubmit: (log: MeetingLog) => void;
   onCancel: () => void;
   initialAttendees?: string[];
   currentUser: UserProfile;
+  onEscalate?: (data: { studentName: string; description: string; date: string }) => void;
 }
 
 const TEMPLATES: Record<string, string> = {
@@ -20,7 +22,8 @@ const TEMPLATES: Record<string, string> = {
   'General': `Topic: \n\nKey Points Discussed: \n\nNext Steps: `
 };
 
-const MeetingForm: React.FC<MeetingFormProps> = ({ onSubmit, onCancel, initialAttendees = [], currentUser }) => {
+const MeetingForm: React.FC<MeetingFormProps> = ({ onSubmit, onCancel, initialAttendees = [], currentUser, onEscalate }) => {
+  const { t, language } = useLanguage();
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [time, setTime] = useState(new Date().toTimeString().slice(0, 5));
   const [attendees, setAttendees] = useState<string[]>(initialAttendees);
@@ -31,9 +34,16 @@ const MeetingForm: React.FC<MeetingFormProps> = ({ onSubmit, onCancel, initialAt
   const [summary, setSummary] = useState('');
   const [actionItems, setActionItems] = useState<string[]>([]); 
   const [sentiment, setSentiment] = useState<'Positive' | 'Neutral' | 'Concerned'>('Neutral');
-  const [isEnhancing, setIsEnhancing] = useState(false);
-  const [enhanceError, setEnhanceError] = useState(false);
+  const [location, setLocation] = useState('');
   
+  // AI States
+  const [isEnhancing, setIsEnhancing] = useState(false);
+  const [isGeneratingActions, setIsGeneratingActions] = useState(false);
+  const [enhanceError, setEnhanceError] = useState<string | null>(null);
+  
+  // Safeguarding Detection State
+  const [safeguardingFlag, setSafeguardingFlag] = useState<{detected: boolean; reason?: string; riskLevel?: string}>({ detected: false });
+
   // Voice Dictation State
   const [isListening, setIsListening] = useState(false);
   const [speechError, setSpeechError] = useState<string | null>(null);
@@ -55,14 +65,11 @@ const MeetingForm: React.FC<MeetingFormProps> = ({ onSubmit, onCancel, initialAt
         };
 
         recognitionRef.current.onresult = (event: any) => {
-            let interimTranscript = '';
             let finalTranscript = '';
 
             for (let i = event.resultIndex; i < event.results.length; ++i) {
                 if (event.results[i].isFinal) {
                     finalTranscript += event.results[i][0].transcript;
-                } else {
-                    interimTranscript += event.results[i][0].transcript;
                 }
             }
             
@@ -77,40 +84,19 @@ const MeetingForm: React.FC<MeetingFormProps> = ({ onSubmit, onCancel, initialAt
 
         recognitionRef.current.onerror = (event: any) => {
             console.error('Speech recognition error', event.error);
-            
-            // Aborted usually means stopped by user or system reset, ignore unless we wanted to listen
             if (event.error === 'aborted') {
                 setIsListening(false);
                 return;
             }
-
             setIsListening(false);
             
             let message = 'Dictation error.';
             switch (event.error) {
-                case 'not-allowed':
-                    message = 'Microphone blocked. Allow access in settings.';
-                    break;
-                case 'no-speech':
-                    message = 'No speech detected. Please speak louder.';
-                    break;
-                case 'audio-capture':
-                    message = 'No microphone found.';
-                    break;
-                case 'network':
-                    message = 'Network error. Internet required.';
-                    break;
-                case 'service-not-allowed':
-                    message = 'Dictation service not allowed.';
-                    break;
-                case 'language-not-supported':
-                    message = 'Language not supported.';
-                    break;
-                default:
-                    message = `Error: ${event.error}`;
+                case 'not-allowed': message = 'Microphone blocked. Allow access.'; break;
+                case 'no-speech': message = 'No speech detected.'; break;
+                default: message = `Error: ${event.error}`;
             }
             setSpeechError(message);
-            // Clear error automatically after 5 seconds
             setTimeout(() => setSpeechError(null), 5000);
         };
         
@@ -118,6 +104,12 @@ const MeetingForm: React.FC<MeetingFormProps> = ({ onSubmit, onCancel, initialAt
              setIsListening(false);
         };
     }
+
+    return () => {
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
+    };
   }, []);
 
   const toggleListening = () => {
@@ -125,7 +117,6 @@ const MeetingForm: React.FC<MeetingFormProps> = ({ onSubmit, onCancel, initialAt
           alert("Voice dictation is not supported in this browser.");
           return;
       }
-
       if (isListening) {
           recognitionRef.current.stop();
           setIsListening(false);
@@ -189,29 +180,82 @@ const MeetingForm: React.FC<MeetingFormProps> = ({ onSubmit, onCancel, initialAt
   const handleEnhance = async () => {
     if (!rawNotes.trim()) return;
     setIsEnhancing(true);
-    setEnhanceError(false);
+    setEnhanceError(null);
+    setSafeguardingFlag({ detected: false }); // Reset flag
+
     try {
-      const result = await enhanceMeetingNotes(rawNotes);
+      const result = await analyzeLogEntry(rawNotes, language);
       
-      if (result.actionItems.length === 1 && result.actionItems[0].includes("Could not")) {
-         setEnhanceError(true);
+      setSummary(result.summary);
+      setSentiment(result.sentiment);
+      
+      if (result.location && result.location !== 'Unknown') {
+          setLocation(result.location);
+      }
+      
+      // Auto-add detected attendees if valid
+      if (result.detectedAttendees && result.detectedAttendees.length > 0) {
+          const validAttendees = result.detectedAttendees.filter(name => 
+              STUDENTS.some(s => s.name === name) && !attendees.includes(name)
+          );
+          if (validAttendees.length > 0) {
+              setAttendees(prev => [...prev, ...validAttendees]);
+          }
       }
 
-      setSummary(result.summary);
-      
+      // Merge actions
       const mergedItems = new Set([...actionItems.filter(i => i.trim() !== ''), ...result.actionItems]);
       setActionItems(Array.from(mergedItems));
-      
-      setSentiment(result.sentiment);
-    } catch (e) {
-      setEnhanceError(true);
+
+      // Safeguarding Detection
+      if (result.safeguarding.flagged) {
+          setSafeguardingFlag({
+              detected: true,
+              reason: result.safeguarding.reason,
+              riskLevel: result.safeguarding.riskLevel
+          });
+          setSentiment('Concerned'); // Force concern
+      }
+
+    } catch (e: any) {
+      console.error(e);
+      setEnhanceError(e.message || "Failed to analyze notes.");
     } finally {
       setIsEnhancing(false);
     }
   };
 
+  const handleEscalateClick = () => {
+      if (onEscalate) {
+          onEscalate({
+              studentName: attendees[0] || '',
+              description: rawNotes,
+              date: date
+          });
+      }
+  };
+
+  const handleGenerateActions = async () => {
+    if (!rawNotes.trim()) return;
+    setIsGeneratingActions(true);
+    try {
+        const actions = await generateSmartActions(rawNotes, language);
+        const uniqueActions = actions.filter(a => !actionItems.includes(a));
+        if (uniqueActions.length > 0) {
+            setActionItems(prev => [...prev.filter(i => i.trim() !== ''), ...uniqueActions]);
+        }
+    } catch (e: any) {
+        setEnhanceError(e.message || "Could not generate actions.");
+    } finally {
+        setIsGeneratingActions(false);
+    }
+  }
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Prevent submission if safeguarding detected but not escalated/acknowledged?
+    // For now, allow submit but warn.
     
     const finalActionItems: ActionItem[] = actionItems
       .filter(i => i.trim() !== '')
@@ -221,13 +265,15 @@ const MeetingForm: React.FC<MeetingFormProps> = ({ onSubmit, onCancel, initialAt
         status: 'Pending'
       }));
 
+    const finalNotes = summary ? `${summary}\n\n[Context/Location: ${location || 'N/A'}]` : rawNotes;
+
     const newLog: MeetingLog = {
       id: crypto.randomUUID(),
       date,
       time,
       attendees,
       type,
-      notes: summary || rawNotes,
+      notes: finalNotes,
       actionItems: finalActionItems,
       sentiment,
       createdBy: currentUser.name
@@ -236,7 +282,27 @@ const MeetingForm: React.FC<MeetingFormProps> = ({ onSubmit, onCancel, initialAt
   };
 
   return (
-    <div className="max-w-4xl mx-auto bg-white rounded-xl shadow-sm border border-slate-200 p-6 md:p-8 animate-fade-in">
+    <div className="max-w-4xl mx-auto bg-white rounded-xl shadow-sm border border-slate-200 p-6 md:p-8 animate-fade-in relative">
+      
+      {safeguardingFlag.detected && (
+          <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between animate-pulse-subtle">
+              <div className="flex items-start">
+                  <ShieldAlert className="text-red-600 mr-3 mt-1 flex-shrink-0" size={24} />
+                  <div>
+                      <h3 className="text-red-800 font-bold text-lg">Safeguarding Issue Detected</h3>
+                      <p className="text-red-600 text-sm">{safeguardingFlag.reason || "AI has flagged potential risk in this entry."} <span className="font-bold">Risk Level: {safeguardingFlag.riskLevel}</span></p>
+                  </div>
+              </div>
+              <button 
+                type="button"
+                onClick={handleEscalateClick}
+                className="mt-3 sm:mt-0 flex items-center bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-bold shadow-sm transition-colors whitespace-nowrap"
+              >
+                  Escalate Now <ArrowRight size={16} className="ml-2" />
+              </button>
+          </div>
+      )}
+
       <div className="flex justify-between items-center mb-6">
         <div>
           <h2 className="text-2xl font-bold text-slate-800">Log New Meeting</h2>
@@ -324,9 +390,9 @@ const MeetingForm: React.FC<MeetingFormProps> = ({ onSubmit, onCancel, initialAt
               </div>
           )}
 
-          <div className="flex flex-wrap gap-2 mt-3">
+          <div className="flex flex-wrap gap-2 mt-3 min-h-[32px]">
             {attendees.map((att, idx) => (
-              <span key={idx} className="inline-flex items-center px-3 py-1 rounded-full bg-blue-50 text-blue-700 text-sm border border-blue-100">
+              <span key={idx} className="inline-flex items-center px-3 py-1 rounded-full bg-blue-50 text-blue-700 text-sm border border-blue-100 animate-fade-in">
                 {att}
                 <button type="button" onClick={() => handleRemoveAttendee(idx)} className="ml-2 text-blue-400 hover:text-blue-600">
                   <X size={14} />
@@ -364,7 +430,7 @@ const MeetingForm: React.FC<MeetingFormProps> = ({ onSubmit, onCancel, initialAt
                   }`}
                 >
                   {isEnhancing ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
-                  <span>AI Enhance</span>
+                  <span>AI Analyze</span>
                 </button>
               </div>
             </div>
@@ -373,7 +439,7 @@ const MeetingForm: React.FC<MeetingFormProps> = ({ onSubmit, onCancel, initialAt
                 <textarea 
                   value={rawNotes}
                   onChange={(e) => setRawNotes(e.target.value)}
-                  placeholder="Tap the microphone to dictate, or select 'Template' to load a structure. Jot down rough points..."
+                  placeholder="Tap microphone or type notes. Use 'AI Analyze' to detect attendees, location, and risks..."
                   className="w-full h-full px-4 py-3 pb-12 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all resize-none font-mono text-sm leading-relaxed min-h-[250px]"
                 />
                 
@@ -404,16 +470,19 @@ const MeetingForm: React.FC<MeetingFormProps> = ({ onSubmit, onCancel, initialAt
           {/* Right: Processed Output */}
           <div className="flex flex-col space-y-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                Formatted Summary
-                {sentiment && sentiment !== 'Neutral' && (
-                   <span className={`ml-2 text-xs px-2 py-0.5 rounded-full ${
-                     sentiment === 'Positive' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                   }`}>
-                     {sentiment}
-                   </span>
-                )}
-              </label>
+              <div className="flex justify-between items-center mb-1">
+                  <label className="block text-sm font-medium text-slate-700">
+                    Formatted Summary
+                    {sentiment && sentiment !== 'Neutral' && (
+                       <span className={`ml-2 text-xs px-2 py-0.5 rounded-full ${
+                         sentiment === 'Positive' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                       }`}>
+                         {sentiment}
+                       </span>
+                    )}
+                  </label>
+                  {location && <span className="text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded">Loc: {location}</span>}
+              </div>
               <textarea 
                 value={summary}
                 onChange={(e) => setSummary(e.target.value)}
@@ -424,14 +493,30 @@ const MeetingForm: React.FC<MeetingFormProps> = ({ onSubmit, onCancel, initialAt
             
             <div className="flex-1 flex flex-col">
               <div className="flex justify-between items-center mb-1">
-                <label className="block text-sm font-medium text-slate-700">Action Items (AI Suggested)</label>
-                <button 
-                  type="button" 
-                  onClick={() => setActionItems([...actionItems, ''])}
-                  className="text-xs text-blue-600 hover:text-blue-700"
-                >
-                  + Add Item
-                </button>
+                <label className="block text-sm font-medium text-slate-700">Action Items</label>
+                <div className="flex space-x-2">
+                    <button 
+                        type="button"
+                        onClick={handleGenerateActions}
+                        disabled={isGeneratingActions || !rawNotes}
+                        className={`text-xs flex items-center space-x-1 px-2 py-1 rounded transition-colors ${
+                            isGeneratingActions || !rawNotes 
+                            ? 'bg-slate-100 text-slate-400 cursor-not-allowed' 
+                            : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100'
+                        }`}
+                        title="Generate SMART Action Items from notes"
+                    >
+                        {isGeneratingActions ? <Loader2 size={12} className="animate-spin" /> : <Zap size={12} />}
+                        <span>Suggest Actions</span>
+                    </button>
+                    <button 
+                        type="button" 
+                        onClick={() => setActionItems([...actionItems, ''])}
+                        className="text-xs text-blue-600 hover:text-blue-700"
+                    >
+                        + Add Item
+                    </button>
+                </div>
               </div>
               <div className="flex-1 bg-slate-50 rounded-lg border border-slate-300 p-3 space-y-2 overflow-y-auto max-h-[150px]">
                 {actionItems.map((item, idx) => (
@@ -454,11 +539,11 @@ const MeetingForm: React.FC<MeetingFormProps> = ({ onSubmit, onCancel, initialAt
                     </button>
                   </div>
                 ))}
-                {actionItems.length === 0 && !enhanceError && <p className="text-xs text-slate-400 text-center mt-4">No action items yet. Use AI Enhance to generate.</p>}
+                {actionItems.length === 0 && !enhanceError && <p className="text-xs text-slate-400 text-center mt-4">No action items yet. Use Suggest Actions to generate.</p>}
                 {enhanceError && (
-                  <div className="flex flex-col items-center justify-center text-center mt-2">
-                     <p className="text-xs text-red-500 flex items-center"><AlertCircle size={12} className="mr-1"/> AI Service Unavailable</p>
-                     <p className="text-[10px] text-slate-400">Please enter action items manually.</p>
+                  <div className="flex flex-col items-center justify-center text-center mt-2 p-2 bg-red-50 rounded">
+                     <p className="text-xs text-red-500 flex items-center font-bold"><AlertCircle size={12} className="mr-1"/> Analysis Failed</p>
+                     <p className="text-[10px] text-slate-500">{enhanceError}</p>
                   </div>
                 )}
               </div>

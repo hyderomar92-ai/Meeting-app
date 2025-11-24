@@ -1,8 +1,11 @@
-import React from 'react';
+
+import React, { useState, useMemo } from 'react';
 import { MeetingLog, BehaviourEntry, SafeguardingCase } from '../types';
-import { ArrowLeft, Mail, Phone, Clock, GraduationCap, ClipboardList, CheckCircle2, Circle, Plus, User, Users, Flag, Star, AlertCircle, Shield, ChevronRight } from 'lucide-react';
+import { generateCertificateContent, CertificateResponse } from '../services/geminiService';
+import { useLanguage } from '../contexts/LanguageContext';
+import { ArrowLeft, Mail, Phone, Clock, GraduationCap, ClipboardList, CheckCircle2, Circle, Plus, User, Users, Flag, Star, AlertCircle, Shield, ChevronRight, TrendingUp, Sparkles, Loader2, Award, Printer, X } from 'lucide-react';
 import { STUDENTS } from '../data/students';
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, LineChart, Line, XAxis, YAxis, CartesianGrid } from 'recharts';
 
 interface StudentProfileProps {
   studentName: string;
@@ -29,10 +32,17 @@ const StudentProfile: React.FC<StudentProfileProps> = ({
   onQuickLog,
   onViewSafeguarding
 }) => {
+  const { language } = useLanguage();
   const studentDetails = STUDENTS.find(s => s.name === studentName);
   const studentLogs = logs.filter(l => l.attendees.includes(studentName)).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   const studentBehaviour = behaviourEntries.filter(b => b.studentName === studentName).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   
+  // Certificate State
+  const [showCertificateModal, setShowCertificateModal] = useState(false);
+  const [isGeneratingCert, setIsGeneratingCert] = useState(false);
+  const [certificateData, setCertificateData] = useState<CertificateResponse | null>(null);
+  const [certificateError, setCertificateError] = useState<string | null>(null);
+
   // Safeguarding check
   const activeSafeguarding = safeguardingCases.filter(c => c.studentName === studentName && c.status !== 'Closed');
   const criticalSafeguarding = activeSafeguarding.filter(c => c.generatedReport.riskLevel === 'High' || c.generatedReport.riskLevel === 'Critical');
@@ -56,12 +66,73 @@ const StudentProfile: React.FC<StudentProfileProps> = ({
     value: typeCount[type]
   }));
 
+  // Sentiment Trend Data
+  const sentimentTrendData = useMemo(() => {
+     // Sort chronological
+     const sortedLogs = [...studentLogs].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+     return sortedLogs.map(l => ({
+        date: new Date(l.date).toLocaleDateString(),
+        score: l.sentiment === 'Positive' ? 1 : l.sentiment === 'Concerned' ? -1 : 0,
+        label: l.sentiment
+     }));
+  }, [studentLogs]);
+
+  const handleGenerateCertificate = async () => {
+      setIsGeneratingCert(true);
+      setCertificateData(null);
+      setCertificateError(null);
+      setShowCertificateModal(true);
+
+      const positiveLogs = studentLogs
+        .filter(l => l.sentiment === 'Positive')
+        .slice(0, 3)
+        .map(l => l.notes);
+      
+      const merits = studentBehaviour
+        .filter(b => b.type === 'POSITIVE')
+        .slice(0, 5)
+        .map(b => b.category);
+
+      try {
+          const result = await generateCertificateContent(studentName, positiveLogs, merits, language);
+          setCertificateData(result);
+      } catch (e) {
+          console.error(e);
+          setCertificateError("Failed to generate certificate content. Please try again later.");
+      } finally {
+          setIsGeneratingCert(false);
+      }
+  };
+
+  const handlePrintCertificate = () => {
+      const printContents = document.getElementById('certificate-print-area')?.innerHTML;
+      const originalContents = document.body.innerHTML;
+      
+      if(printContents) {
+          document.body.innerHTML = printContents;
+          window.print();
+          document.body.innerHTML = originalContents;
+          window.location.reload(); // Simple reload to restore listeners
+      }
+  };
+
   return (
     <div className="animate-fade-in">
-      <button onClick={onBack} className="mb-6 flex items-center text-slate-500 hover:text-slate-800 transition-colors">
-        <ArrowLeft size={20} className="mr-2" />
-        Back to Directory
-      </button>
+      <div className="flex justify-between items-center mb-6">
+        <button onClick={onBack} className="flex items-center text-slate-500 hover:text-slate-800 transition-colors">
+            <ArrowLeft size={20} className="mr-2" />
+            Back to Directory
+        </button>
+        {netBehaviourScore > 0 && (
+             <button 
+                onClick={handleGenerateCertificate}
+                className="flex items-center px-4 py-2 bg-gradient-to-r from-amber-400 to-orange-500 text-white rounded-lg shadow-md hover:shadow-lg transition-all font-bold"
+             >
+                <Award size={18} className="mr-2" />
+                Generate Praise Certificate
+             </button>
+        )}
+      </div>
       
       {/* Safeguarding Alert Banner */}
       {activeSafeguarding.length > 0 && (
@@ -175,6 +246,46 @@ const StudentProfile: React.FC<StudentProfileProps> = ({
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2">
           
+          {/* Sentiment Trend Chart */}
+          <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 mb-8">
+             <h3 className="text-lg font-bold text-slate-800 mb-6 flex items-center">
+                <TrendingUp size={20} className="mr-2 text-indigo-600" />
+                Sentiment Trajectory
+             </h3>
+             <div className="h-64 w-full">
+                {sentimentTrendData.length > 1 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={sentimentTrendData} margin={{ top: 5, right: 30, left: -20, bottom: 5 }}>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                            <XAxis dataKey="date" tick={{fontSize: 10}} />
+                            <YAxis 
+                                domain={[-1, 1]} 
+                                ticks={[-1, 0, 1]} 
+                                tickFormatter={(val) => val === 1 ? 'Positive' : val === -1 ? 'Concern' : 'Neutral'}
+                                tick={{fontSize: 10}}
+                            />
+                            <Tooltip 
+                                formatter={(value) => value === 1 ? 'Positive' : value === -1 ? 'Concerned' : 'Neutral'}
+                                labelStyle={{color: '#64748b'}}
+                            />
+                            <Line 
+                                type="monotone" 
+                                dataKey="score" 
+                                stroke="#4f46e5" 
+                                strokeWidth={2} 
+                                dot={{r: 4, strokeWidth: 2}} 
+                                activeDot={{r: 6}}
+                            />
+                        </LineChart>
+                    </ResponsiveContainer>
+                ) : (
+                    <div className="h-full flex items-center justify-center text-slate-400 italic">
+                        Not enough data points for trend analysis.
+                    </div>
+                )}
+             </div>
+          </div>
+
           {/* Contact Information Section */}
           <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 mb-8">
             <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center">
@@ -387,6 +498,99 @@ const StudentProfile: React.FC<StudentProfileProps> = ({
            </div>
         </div>
       </div>
+
+      {/* Certificate Modal */}
+      {showCertificateModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fade-in">
+              <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full overflow-hidden flex flex-col max-h-[90vh]">
+                  <div className="flex justify-between items-center p-4 border-b border-slate-100">
+                      <h3 className="text-lg font-bold text-slate-800 flex items-center">
+                          <Award className="mr-2 text-amber-500" />
+                          Generate Certificate
+                      </h3>
+                      <button onClick={() => setShowCertificateModal(false)} className="text-slate-400 hover:text-slate-600">
+                          <X size={24} />
+                      </button>
+                  </div>
+                  
+                  <div className="flex-1 overflow-y-auto p-8 bg-slate-100 flex items-center justify-center">
+                      {isGeneratingCert ? (
+                          <div className="text-center">
+                              <Loader2 size={48} className="text-indigo-600 animate-spin mx-auto mb-4" />
+                              <h4 className="text-lg font-semibold text-slate-700">Writing Praise...</h4>
+                              <p className="text-sm text-slate-500">Gemini is analyzing {studentName}'s achievements.</p>
+                          </div>
+                      ) : certificateData ? (
+                          <div id="certificate-print-area" className="bg-white p-12 shadow-lg w-full text-center border-8 border-double border-amber-200 relative">
+                               {/* Decorative corners */}
+                               <div className="absolute top-4 left-4 w-16 h-16 border-t-4 border-l-4 border-amber-400"></div>
+                               <div className="absolute top-4 right-4 w-16 h-16 border-t-4 border-r-4 border-amber-400"></div>
+                               <div className="absolute bottom-4 left-4 w-16 h-16 border-b-4 border-l-4 border-amber-400"></div>
+                               <div className="absolute bottom-4 right-4 w-16 h-16 border-b-4 border-r-4 border-amber-400"></div>
+                               
+                               <div className="mb-6">
+                                   <Sparkles size={48} className="mx-auto text-amber-400 mb-2" />
+                                   <h1 className="text-4xl font-serif font-bold text-slate-800 mb-2 uppercase tracking-wider">{certificateData.title}</h1>
+                                   <p className="text-amber-600 font-bold uppercase tracking-widest text-sm">{certificateData.awardType} Award</p>
+                               </div>
+
+                               <p className="text-slate-500 italic mb-4">This certificate is proudly presented to</p>
+                               <h2 className="text-3xl font-cursive font-bold text-indigo-700 mb-6 border-b-2 border-slate-100 pb-4 inline-block px-12">{studentName}</h2>
+
+                               <p className="text-lg text-slate-700 leading-relaxed max-w-lg mx-auto mb-12 font-serif">
+                                   "{certificateData.message}"
+                               </p>
+
+                               <div className="flex justify-between items-end mt-12 px-12">
+                                   <div className="text-center">
+                                       <div className="w-40 border-b border-slate-400 mb-2"></div>
+                                       <p className="text-xs text-slate-500 uppercase font-bold">Date</p>
+                                       <p className="text-sm">{new Date().toLocaleDateString()}</p>
+                                   </div>
+                                   <div className="w-24 h-24 bg-amber-500 rounded-full flex items-center justify-center text-white font-bold shadow-inner border-4 border-amber-300">
+                                       <Award size={48} />
+                                   </div>
+                                   <div className="text-center">
+                                       <div className="w-40 border-b border-slate-400 mb-2"></div>
+                                       <p className="text-xs text-slate-500 uppercase font-bold">Signed</p>
+                                       <p className="text-sm font-serif">Principal / Teacher</p>
+                                   </div>
+                               </div>
+                          </div>
+                      ) : (
+                          <div className="flex flex-col items-center justify-center text-center p-6 bg-red-50 rounded-xl border border-red-200">
+                              <AlertCircle size={48} className="text-red-500 mb-3" />
+                              <h4 className="text-lg font-bold text-red-700">Generation Failed</h4>
+                              <p className="text-red-600 mb-4">{certificateError || "An unexpected error occurred."}</p>
+                              <button 
+                                onClick={handleGenerateCertificate}
+                                className="px-4 py-2 bg-white text-red-600 border border-red-200 rounded-lg hover:bg-red-50 font-medium"
+                              >
+                                Try Again
+                              </button>
+                          </div>
+                      )}
+                  </div>
+
+                  {!isGeneratingCert && certificateData && (
+                      <div className="p-4 bg-white border-t border-slate-100 flex justify-end space-x-3">
+                          <button 
+                            onClick={() => setShowCertificateModal(false)}
+                            className="px-4 py-2 text-slate-600 hover:bg-slate-50 rounded-lg font-medium"
+                          >
+                              Close
+                          </button>
+                          <button 
+                            onClick={handlePrintCertificate}
+                            className="flex items-center px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium shadow-lg"
+                          >
+                              <Printer size={18} className="mr-2" /> Print Certificate
+                          </button>
+                      </div>
+                  )}
+              </div>
+          </div>
+      )}
     </div>
   );
 };

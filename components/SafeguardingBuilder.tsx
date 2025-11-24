@@ -1,20 +1,23 @@
+
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { SafeguardingCase, MeetingLog, UserProfile } from '../types';
 import { generateSafeguardingReport } from '../services/geminiService';
-import { Shield, AlertTriangle, FileText, Save, Loader2, Search, User, ChevronRight, ClipboardList, Gavel, Clock, Plus, Calendar, ArrowLeft, Filter, CheckCircle2, AlertCircle, Activity, Trash2, Tag, BarChart3, Paperclip, CheckSquare, Square, Sparkles, BrainCircuit, X, Lock, Eye, EyeOff, Copy, ChevronDown } from 'lucide-react';
+import { Shield, AlertTriangle, FileText, Save, Loader2, Search, User, ChevronRight, ClipboardList, Gavel, Clock, Plus, Calendar, ArrowLeft, Filter, CheckCircle2, AlertCircle, Activity, Trash2, Tag, BarChart3, Paperclip, CheckSquare, Square, Sparkles, BrainCircuit, X, Lock, Eye, EyeOff, Copy, ChevronDown, Edit3 } from 'lucide-react';
 import { STUDENTS } from '../data/students';
 
 interface SafeguardingBuilderProps {
   cases: SafeguardingCase[];
   logs: MeetingLog[];
   onSave: (caseFile: SafeguardingCase) => void;
+  onUpdate: (caseFile: SafeguardingCase) => void;
   onDelete: (id: string) => void;
   onCancel: () => void;
   currentUser: UserProfile;
   initialSearchTerm?: string;
+  initialData?: { studentName: string; description: string; date: string } | null;
 }
 
-const SafeguardingBuilder: React.FC<SafeguardingBuilderProps> = ({ cases, logs, onSave, onDelete, onCancel, currentUser, initialSearchTerm = '' }) => {
+const SafeguardingBuilder: React.FC<SafeguardingBuilderProps> = ({ cases, logs, onSave, onUpdate, onDelete, onCancel, currentUser, initialSearchTerm = '', initialData }) => {
   const [mode, setMode] = useState<'LIST' | 'BUILD'>('LIST');
   const [selectedCase, setSelectedCase] = useState<SafeguardingCase | null>(null);
   const [caseSearchTerm, setCaseSearchTerm] = useState(initialSearchTerm);
@@ -22,6 +25,9 @@ const SafeguardingBuilder: React.FC<SafeguardingBuilderProps> = ({ cases, logs, 
   const [typeFilter, setTypeFilter] = useState<string>('All');
   const [authorFilter, setAuthorFilter] = useState<string>('All');
   const [caseToDelete, setCaseToDelete] = useState<string | null>(null);
+  
+  // Edit Mode State
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   // Form State
   const [studentName, setStudentName] = useState('');
@@ -41,11 +47,15 @@ const SafeguardingBuilder: React.FC<SafeguardingBuilderProps> = ({ cases, logs, 
 
   // AI State
   const [isGenerating, setIsGenerating] = useState(false);
+  const [generationError, setGenerationError] = useState<string | null>(null);
   const [generatedCase, setGeneratedCase] = useState<SafeguardingCase['generatedReport'] | null>(null);
 
   // View State (Redaction)
   const [isRedacted, setIsRedacted] = useState(false);
   const [copySuccess, setCopySuccess] = useState(false);
+  
+  // Save Feedback State
+  const [noteSaveStatus, setNoteSaveStatus] = useState<'IDLE' | 'SAVING' | 'SAVED'>('IDLE');
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -57,12 +67,22 @@ const SafeguardingBuilder: React.FC<SafeguardingBuilderProps> = ({ cases, logs, 
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [wrapperRef]);
 
+  // Handle Escalation Data
+  useEffect(() => {
+    if (initialData) {
+        setMode('BUILD');
+        setStudentName(initialData.studentName);
+        setDescription(initialData.description);
+        setDate(initialData.date);
+    }
+  }, [initialData]);
+
   // Auto-populate student name if entering build mode with an initial search term
   useEffect(() => {
-      if (mode === 'BUILD' && initialSearchTerm && !studentName) {
+      if (mode === 'BUILD' && initialSearchTerm && !studentName && !editingId && !initialData) {
           setStudentName(initialSearchTerm);
       }
-  }, [mode, initialSearchTerm]);
+  }, [mode, initialSearchTerm, editingId, initialData]);
 
   // Extract unique incident types for the filter dropdown
   const uniqueIncidentTypes = useMemo(() => {
@@ -154,6 +174,7 @@ const SafeguardingBuilder: React.FC<SafeguardingBuilderProps> = ({ cases, logs, 
       Date: ${caseData.date}
       Incident: ${caseData.incidentType}
       Risk Level: ${caseData.generatedReport.riskLevel}
+      Status: ${caseData.status}
 
       DSL SUMMARY:
       ${redactText(caseData.generatedReport.dslSummary, caseData.studentName)}
@@ -163,6 +184,9 @@ const SafeguardingBuilder: React.FC<SafeguardingBuilderProps> = ({ cases, logs, 
       
       NEXT STEPS:
       ${caseData.generatedReport.nextSteps.map(s => `- ${redactText(s, caseData.studentName)}`).join('\n')}
+      
+      RESOLUTION NOTES:
+      ${caseData.resolutionNotes || 'N/A'}
       `;
 
       navigator.clipboard.writeText(text).then(() => {
@@ -174,19 +198,39 @@ const SafeguardingBuilder: React.FC<SafeguardingBuilderProps> = ({ cases, logs, 
   const handleGenerate = async () => {
     if (!studentName || !description) return;
     setIsGenerating(true);
+    setGenerationError(null);
     try {
       const evidenceLogs = logs.filter(l => selectedLogIds.includes(l.id));
       const report = await generateSafeguardingReport(studentName, description, evidenceLogs);
       setGeneratedCase(report);
+    } catch (e) {
+      setGenerationError("Failed to generate report using AI. Please try again.");
     } finally {
       setIsGenerating(false);
     }
   };
 
+  const handleEditClick = (c: SafeguardingCase) => {
+    setStudentName(c.studentName);
+    setDate(c.date);
+    setIncidentType(c.incidentType);
+    setDescription(c.rawDescription);
+    setStatus(c.status);
+    setIsConfidential(c.isConfidential || false);
+    setSelectedLogIds(c.relatedLogIds || []);
+    setGeneratedCase(c.generatedReport);
+    setEditingId(c.id);
+    setMode('BUILD');
+  };
+
   const handleFinalSave = () => {
     if (!generatedCase) return;
+    
+    // Preserve resolution notes if editing
+    const existingCase = editingId ? cases.find(c => c.id === editingId) : null;
+    
     const newCase: SafeguardingCase = {
-      id: crypto.randomUUID(),
+      id: editingId || crypto.randomUUID(),
       studentName,
       date,
       incidentType,
@@ -194,18 +238,59 @@ const SafeguardingBuilder: React.FC<SafeguardingBuilderProps> = ({ cases, logs, 
       generatedReport: generatedCase,
       status: status,
       relatedLogIds: selectedLogIds,
-      createdBy: currentUser.name,
-      isConfidential: isConfidential
+      createdBy: existingCase?.createdBy || currentUser.name,
+      isConfidential: isConfidential,
+      resolutionNotes: existingCase?.resolutionNotes || '',
+      completedSteps: existingCase?.completedSteps || [],
+      updatedAt: new Date().toISOString()
     };
-    onSave(newCase);
+    
+    if (editingId) {
+        onUpdate(newCase);
+    } else {
+        onSave(newCase);
+    }
+
     setMode('LIST'); 
     setStudentName('');
     setDescription('');
     setSelectedLogIds([]);
     setGeneratedCase(null);
     setIsConfidential(false);
+    setEditingId(null);
   };
   
+  // Interactive Update Handlers (Detail View)
+  const updateCaseStatus = (c: SafeguardingCase, newStatus: SafeguardingCase['status']) => {
+      const updated = { ...c, status: newStatus, updatedAt: new Date().toISOString() };
+      setSelectedCase(updated);
+      onUpdate(updated);
+  };
+
+  const toggleActionStep = (c: SafeguardingCase, step: string) => {
+      const currentCompleted = c.completedSteps || [];
+      const newCompleted = currentCompleted.includes(step) 
+          ? currentCompleted.filter(s => s !== step)
+          : [...currentCompleted, step];
+      
+      const updated = { ...c, completedSteps: newCompleted, updatedAt: new Date().toISOString() };
+      setSelectedCase(updated);
+      onUpdate(updated);
+  };
+
+  const handleResolutionNotesChange = (c: SafeguardingCase, notes: string) => {
+      // Just update local state for interactivity, persist on blur
+      setSelectedCase({ ...c, resolutionNotes: notes });
+  };
+
+  const saveResolutionNotes = (c: SafeguardingCase) => {
+      setNoteSaveStatus('SAVING');
+      const updated = { ...c, updatedAt: new Date().toISOString() };
+      onUpdate(updated);
+      setTimeout(() => setNoteSaveStatus('SAVED'), 500);
+      setTimeout(() => setNoteSaveStatus('IDLE'), 2500);
+  };
+
   // LIST MODE: Review existing cases
   if (mode === 'LIST' && !selectedCase) {
       return (
@@ -243,7 +328,7 @@ const SafeguardingBuilder: React.FC<SafeguardingBuilderProps> = ({ cases, logs, 
                     </div>
                     <p className="text-slate-500">Manage and track safeguarding incidents and reports.</p>
                 </div>
-                <button onClick={() => setMode('BUILD')} className="flex items-center px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors shadow-md font-medium">
+                <button onClick={() => { setEditingId(null); setMode('BUILD'); setGeneratedCase(null); setStudentName(''); setDescription(''); }} className="flex items-center px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors shadow-md font-medium">
                     <Plus size={18} className="mr-2" /> New Case File
                 </button>
               </header>
@@ -384,6 +469,9 @@ const SafeguardingBuilder: React.FC<SafeguardingBuilderProps> = ({ cases, logs, 
   // DETAIL MODE: Review a specific case
   if (selectedCase) {
       const score = calculateRiskScore(selectedCase.generatedReport.riskLevel, selectedCase.generatedReport.sentiment);
+      const completionPercentage = selectedCase.generatedReport.nextSteps.length > 0 
+          ? Math.round(((selectedCase.completedSteps?.length || 0) / selectedCase.generatedReport.nextSteps.length) * 100)
+          : 0;
 
       return (
           <div className="animate-fade-in max-w-5xl mx-auto bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden">
@@ -403,6 +491,14 @@ const SafeguardingBuilder: React.FC<SafeguardingBuilderProps> = ({ cases, logs, 
                       </div>
                   </div>
                   <div className="flex items-center space-x-3">
+                       <button
+                         onClick={() => handleEditClick(selectedCase)}
+                         className="flex items-center space-x-1 px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-medium text-slate-700 hover:bg-slate-50 hover:text-blue-600 hover:border-blue-300 transition-colors"
+                       >
+                         <Edit3 size={14} />
+                         <span>Edit Details</span>
+                       </button>
+                       <div className="h-6 w-px bg-slate-300 mx-2"></div>
                       <button 
                          onClick={() => handleCopyToClipboard(selectedCase)}
                          className="flex items-center space-x-1 px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-50 transition-colors"
@@ -417,19 +513,43 @@ const SafeguardingBuilder: React.FC<SafeguardingBuilderProps> = ({ cases, logs, 
                          {isRedacted ? <EyeOff size={14} /> : <Eye size={14} />}
                          <span>{isRedacted ? 'Redaction On' : 'Redact PII'}</span>
                        </button>
-                       {selectedCase.generatedReport.sentiment && (
-                           <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider border ${
-                                selectedCase.generatedReport.sentiment === 'Critical' ? 'bg-red-100 text-red-700 border-red-200' :
-                                selectedCase.generatedReport.sentiment === 'Serious' ? 'bg-orange-100 text-orange-700 border-orange-200' :
-                                'bg-blue-50 text-blue-700 border-blue-200'
-                            }`}>
-                                {selectedCase.generatedReport.sentiment}
-                            </span>
-                       )}
                   </div>
               </div>
               
               <div className="p-8 space-y-8 overflow-y-auto">
+                  {/* Status Bar */}
+                  <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row justify-between items-center gap-4">
+                      <div className="flex items-center space-x-4 w-full md:w-auto">
+                          <span className="text-sm font-bold text-slate-500 uppercase tracking-wide">Case Status:</span>
+                          <div className="flex bg-slate-100 p-1 rounded-lg">
+                              {['Open', 'Investigating', 'Closed'].map((s) => (
+                                  <button 
+                                      key={s}
+                                      onClick={() => updateCaseStatus(selectedCase, s as any)}
+                                      className={`px-4 py-1.5 text-xs font-bold rounded-md transition-all ${selectedCase.status === s 
+                                          ? (s === 'Open' ? 'bg-red-500 text-white shadow' : s === 'Investigating' ? 'bg-orange-500 text-white shadow' : 'bg-green-600 text-white shadow') 
+                                          : 'text-slate-500 hover:text-slate-800'
+                                      }`}
+                                  >
+                                      {s}
+                                  </button>
+                              ))}
+                          </div>
+                      </div>
+                      
+                      <div className="flex items-center space-x-4 w-full md:w-auto">
+                           <div className="text-right">
+                               <p className="text-[10px] font-bold text-slate-400 uppercase">Resolution Progress</p>
+                               <div className="flex items-center justify-end space-x-2">
+                                   <div className="w-32 h-2 bg-slate-100 rounded-full overflow-hidden">
+                                       <div className="h-full bg-emerald-500 transition-all duration-500" style={{ width: `${completionPercentage}%` }}></div>
+                                   </div>
+                                   <span className="text-xs font-bold text-slate-700">{completionPercentage}%</span>
+                               </div>
+                           </div>
+                      </div>
+                  </div>
+
                   {/* ... Detail Content ... */}
                   <div className="grid grid-cols-2 gap-6 text-sm border-b border-slate-100 pb-6">
                       <div><p className="text-slate-400 mb-1 uppercase text-xs font-bold">Incident Date</p><p className="font-medium text-slate-800 text-lg">{selectedCase.date}</p></div>
@@ -505,7 +625,7 @@ const SafeguardingBuilder: React.FC<SafeguardingBuilderProps> = ({ cases, logs, 
                                     {logs.filter(l => selectedCase.relatedLogIds?.includes(l.id)).map(log => (
                                         <div key={log.id} className="text-xs p-3 border border-slate-100 rounded-lg flex justify-between items-center bg-white hover:bg-slate-50">
                                             <div>
-                                                <span className="font-bold text-slate-700">{new Date(log.date).toLocaleDateString()}</span>
+                                                <span className="font-bold text-slate-700">{new Date(log.date).toLocaleDateString()}</p>
                                                 <span className="mx-2 text-slate-300">|</span>
                                                 <span className="text-slate-600">{log.type}</span>
                                             </div>
@@ -533,6 +653,7 @@ const SafeguardingBuilder: React.FC<SafeguardingBuilderProps> = ({ cases, logs, 
                       </ul>
                   </div>
                   
+                  {/* Action Plan Checklist */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <div className="bg-amber-50 p-5 rounded-xl border border-amber-100">
                           <h4 className="font-bold text-amber-800 text-sm mb-3 flex items-center"><AlertTriangle size={16} className="mr-2" /> Witness Questions</h4>
@@ -540,12 +661,62 @@ const SafeguardingBuilder: React.FC<SafeguardingBuilderProps> = ({ cases, logs, 
                               {selectedCase.generatedReport.witnessQuestions.map((q, i) => (<li key={i} className="flex items-start text-sm text-amber-900"><span className="mr-2">•</span>{redactText(q, selectedCase.studentName)}</li>))}
                           </ul>
                       </div>
+                      
                       <div className="bg-emerald-50 p-5 rounded-xl border border-emerald-100">
-                          <h4 className="font-bold text-emerald-800 text-sm mb-3 flex items-center"><ClipboardList size={16} className="mr-2" /> Action Plan</h4>
+                          <h4 className="font-bold text-emerald-800 text-sm mb-3 flex items-center"><ClipboardList size={16} className="mr-2" /> Action Plan Checklist</h4>
                            <ul className="space-y-2">
-                              {selectedCase.generatedReport.nextSteps.map((s, i) => (<li key={i} className="flex items-start text-sm text-emerald-900"><span className="mr-2 font-bold">{i+1}.</span>{redactText(s, selectedCase.studentName)}</li>))}
+                              {selectedCase.generatedReport.nextSteps.map((step, i) => {
+                                  const isCompleted = selectedCase.completedSteps?.includes(step);
+                                  return (
+                                    <li 
+                                        key={i} 
+                                        className={`flex items-start text-sm p-2 rounded cursor-pointer transition-colors ${isCompleted ? 'bg-emerald-100/50 text-emerald-800/60 line-through' : 'bg-white hover:bg-emerald-100 text-emerald-900 shadow-sm'}`}
+                                        onClick={() => toggleActionStep(selectedCase, step)}
+                                    >
+                                        <div className={`mt-0.5 mr-2 w-4 h-4 rounded border flex items-center justify-center ${isCompleted ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-emerald-300'}`}>
+                                            {isCompleted && <CheckCircle2 size={12} />}
+                                        </div>
+                                        <span>{redactText(step, selectedCase.studentName)}</span>
+                                    </li>
+                                  );
+                              })}
                           </ul>
                       </div>
+                  </div>
+                  
+                  {/* Resolution Notes */}
+                  <div className="bg-slate-50 p-5 rounded-xl border border-slate-200">
+                       <div className="flex justify-between items-center mb-3">
+                           <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wide flex items-center">
+                               <CheckSquare size={16} className="mr-2 text-slate-500" /> Resolution / Updates
+                           </h3>
+                       </div>
+                       <textarea 
+                           className="w-full min-h-[100px] p-4 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none text-sm leading-relaxed bg-white mb-3"
+                           placeholder="Add resolution notes, outcome summaries, or ongoing updates here..."
+                           value={selectedCase.resolutionNotes || ''}
+                           onChange={(e) => handleResolutionNotesChange(selectedCase, e.target.value)}
+                       />
+                       <div className="flex justify-between items-center">
+                            <div className="text-[10px] text-slate-400">
+                                {selectedCase.updatedAt ? `Last updated: ${new Date(selectedCase.updatedAt).toLocaleString()}` : ''}
+                            </div>
+                            <button 
+                                onClick={() => saveResolutionNotes(selectedCase)}
+                                disabled={noteSaveStatus === 'SAVING'}
+                                className={`flex items-center px-4 py-2 rounded-lg text-sm font-bold transition-all ${
+                                    noteSaveStatus === 'SAVED' 
+                                    ? 'bg-green-600 text-white' 
+                                    : 'bg-slate-800 text-white hover:bg-slate-900'
+                                }`}
+                            >
+                                {noteSaveStatus === 'SAVING' ? <Loader2 size={14} className="mr-2 animate-spin"/> : 
+                                 noteSaveStatus === 'SAVED' ? <CheckCircle2 size={14} className="mr-2"/> : 
+                                 <Save size={14} className="mr-2"/>}
+                                {noteSaveStatus === 'SAVING' ? 'Saving...' : 
+                                 noteSaveStatus === 'SAVED' ? 'Update Saved' : 'Submit Update'}
+                            </button>
+                       </div>
                   </div>
 
                   <div>
@@ -564,8 +735,8 @@ const SafeguardingBuilder: React.FC<SafeguardingBuilderProps> = ({ cases, logs, 
     <div className="animate-fade-in max-w-6xl mx-auto">
       <header className="mb-8 flex items-center justify-between">
         <div className="flex items-center space-x-3 mb-2">
-           <button onClick={() => setMode('LIST')} className="p-2 bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200 transition-colors flex items-center"><ChevronRight className="rotate-180" size={20} /></button>
-           <h1 className="text-2xl font-bold text-slate-800">New Safeguarding Case</h1>
+           <button onClick={() => { setMode('LIST'); setEditingId(null); setGeneratedCase(null); setStudentName(''); setDescription(''); }} className="p-2 bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200 transition-colors flex items-center"><ChevronRight className="rotate-180" size={20} /></button>
+           <h1 className="text-2xl font-bold text-slate-800">{editingId ? 'Edit Safeguarding Case' : 'New Safeguarding Case'}</h1>
         </div>
         <div className="text-sm text-slate-500">Filing as: <span className="font-semibold text-slate-800">{currentUser.name}</span></div>
       </header>
@@ -689,12 +860,19 @@ const SafeguardingBuilder: React.FC<SafeguardingBuilderProps> = ({ cases, logs, 
                     />
                 </div>
 
+                {generationError && (
+                    <div className="mb-4 p-3 bg-red-50 text-red-600 text-sm rounded-lg flex items-center">
+                        <AlertTriangle size={16} className="mr-2" />
+                        {generationError}
+                    </div>
+                )}
+
                 {!generatedCase ? (
                     <div className="bg-slate-50 rounded-xl border border-slate-200 border-dashed p-8 flex flex-col items-center justify-center text-center">
                         <div className="w-12 h-12 bg-white rounded-full shadow-sm flex items-center justify-center mb-4 text-indigo-500">
                             <Sparkles size={24} />
                         </div>
-                        <h3 className="text-slate-800 font-bold mb-1">Generate AI Case File</h3>
+                        <h3 className="text-slate-800 font-bold mb-1">{editingId ? 'Regenerate Case File' : 'Generate AI Case File'}</h3>
                         <p className="text-xs text-slate-500 max-w-xs mb-6">Gemini will draft a formal DSL summary, chronology, and risk assessment based on your description and evidence.</p>
                         <button 
                             onClick={handleGenerate}
@@ -729,7 +907,7 @@ const SafeguardingBuilder: React.FC<SafeguardingBuilderProps> = ({ cases, logs, 
                         <div className="flex space-x-3 pt-2">
                              <button onClick={() => setGeneratedCase(null)} className="flex-1 px-4 py-2 border border-slate-300 text-slate-600 rounded-lg font-medium hover:bg-slate-50">Edit Inputs</button>
                              <button onClick={handleFinalSave} className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg font-bold hover:bg-green-700 shadow-lg shadow-green-200 flex items-center justify-center">
-                                 <Save size={18} className="mr-2" /> Save Case File
+                                 <Save size={18} className="mr-2" /> {editingId ? 'Update Case' : 'Save Case File'}
                              </button>
                         </div>
                     </div>

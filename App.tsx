@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { ViewState, MeetingLog, MeetingType, SafeguardingCase, UserProfile, BehaviourEntry } from './types';
 import Dashboard from './components/Dashboard';
@@ -10,8 +11,10 @@ import ReportsView from './components/ReportsView';
 import LoginView from './components/LoginView';
 import BehaviourManager from './components/BehaviourManager';
 import SeatingPlanView from './components/SeatingPlanView';
-import { LayoutDashboard, PlusCircle, Users, Menu, X, GraduationCap, FileText, BookUser, Shield, FileBarChart, LogOut, Star, LayoutGrid } from 'lucide-react';
+import SentinelChat from './components/SentinelChat';
+import { LayoutDashboard, PlusCircle, Users, Menu, X, Shield, FileText, BookUser, FileBarChart, LogOut, Star, LayoutGrid, Globe } from 'lucide-react';
 import { STUDENTS } from './data/students';
+import { useLanguage, Language } from './contexts/LanguageContext';
 
 // Update mocks to use real student names from the new data file
 const MOCK_LOGS: MeetingLog[] = [
@@ -87,7 +90,9 @@ const MOCK_SAFEGUARDING_CASES: SafeguardingCase[] = [
       sentiment: 'Cautionary'
     },
     status: 'Investigating',
-    createdBy: 'Jane Doe'
+    createdBy: 'Jane Doe',
+    completedSteps: [],
+    resolutionNotes: ''
   },
   {
     id: 'sg-2',
@@ -106,17 +111,30 @@ const MOCK_SAFEGUARDING_CASES: SafeguardingCase[] = [
       sentiment: 'Routine'
     },
     status: 'Closed',
-    createdBy: 'Sarah Connor'
+    createdBy: 'Sarah Connor',
+    completedSteps: ['ICT privilege suspension'],
+    resolutionNotes: 'Privileges suspended for 1 week. Parent signed new agreement.'
   }
 ];
 
 function App() {
-  const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
+  const { t, language, setLanguage, dir } = useLanguage();
+
+  // Initialize from LocalStorage if available
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => {
+      try {
+          const saved = localStorage.getItem('sentinel_current_user');
+          return saved ? JSON.parse(saved) : null;
+      } catch {
+          return null;
+      }
+  });
+
   const [currentView, setCurrentView] = useState<ViewState>('DASHBOARD');
   
   const [logs, setLogs] = useState<MeetingLog[]>(() => {
     try {
-      const savedLogs = localStorage.getItem('edulog_data');
+      const savedLogs = localStorage.getItem('sentinel_logs');
       return savedLogs ? JSON.parse(savedLogs) : MOCK_LOGS; 
     } catch (error) {
       console.error('Failed to load logs from storage:', error);
@@ -126,7 +144,7 @@ function App() {
 
   const [safeguardingCases, setSafeguardingCases] = useState<SafeguardingCase[]>(() => {
     try {
-      const savedCases = localStorage.getItem('edulog_safeguarding');
+      const savedCases = localStorage.getItem('sentinel_safeguarding');
       return savedCases ? JSON.parse(savedCases) : MOCK_SAFEGUARDING_CASES;
     } catch (error) {
       return MOCK_SAFEGUARDING_CASES;
@@ -135,7 +153,7 @@ function App() {
 
   const [behaviourEntries, setBehaviourEntries] = useState<BehaviourEntry[]>(() => {
     try {
-      const saved = localStorage.getItem('edulog_behaviour');
+      const saved = localStorage.getItem('sentinel_behaviour');
       return saved ? JSON.parse(saved) : [];
     } catch {
       return [];
@@ -145,20 +163,32 @@ function App() {
   const [selectedStudent, setSelectedStudent] = useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  
+  // Escalation State
+  const [escalationData, setEscalationData] = useState<{ studentName: string; description: string; date: string } | null>(null);
+
+  // Persist Current User
+  useEffect(() => {
+      if (currentUser) {
+          localStorage.setItem('sentinel_current_user', JSON.stringify(currentUser));
+      } else {
+          localStorage.removeItem('sentinel_current_user');
+      }
+  }, [currentUser]);
 
   // Save logs to LocalStorage whenever they change
   useEffect(() => {
-    localStorage.setItem('edulog_data', JSON.stringify(logs));
+    localStorage.setItem('sentinel_logs', JSON.stringify(logs));
   }, [logs]);
 
   // Save safeguarding cases
   useEffect(() => {
-    localStorage.setItem('edulog_safeguarding', JSON.stringify(safeguardingCases));
+    localStorage.setItem('sentinel_safeguarding', JSON.stringify(safeguardingCases));
   }, [safeguardingCases]);
 
   // Save behavior entries
   useEffect(() => {
-    localStorage.setItem('edulog_behaviour', JSON.stringify(behaviourEntries));
+    localStorage.setItem('sentinel_behaviour', JSON.stringify(behaviourEntries));
   }, [behaviourEntries]);
 
   useEffect(() => {
@@ -176,6 +206,11 @@ function App() {
   const handleAddLog = (log: MeetingLog) => {
     setLogs([log, ...logs]);
     setCurrentView('DASHBOARD');
+  };
+  
+  const handleEscalateLog = (data: { studentName: string; description: string; date: string }) => {
+      setEscalationData(data);
+      setCurrentView('SAFEGUARDING');
   };
 
   const handleAddSafeguardingCase = (newCase: SafeguardingCase) => {
@@ -196,7 +231,12 @@ function App() {
       createdBy: newCase.createdBy
     };
     setLogs([logEntry, ...logs]);
+    setEscalationData(null); // Clear escalation state
     setCurrentView('SAFEGUARDING');
+  };
+
+  const handleUpdateSafeguardingCase = (updatedCase: SafeguardingCase) => {
+    setSafeguardingCases(prev => prev.map(c => c.id === updatedCase.id ? updatedCase : c));
   };
 
   const handleDeleteSafeguardingCase = (id: string) => {
@@ -215,9 +255,17 @@ function App() {
     } else if (view === 'SAFEGUARDING' && studentName) {
        // Allow passing student name to safeguarding view to filter list
        setSelectedStudent(studentName);
+       setEscalationData(null);
     } else if (view !== 'STUDENT_PROFILE' && view !== 'NEW_LOG' && view !== 'SAFEGUARDING') {
        setSelectedStudent(null);
+       setEscalationData(null);
     }
+    
+    // Clear escalation data if navigating away from safeguarding unless specifically escalating
+    if (view !== 'SAFEGUARDING') {
+        setEscalationData(null);
+    }
+
     setCurrentView(view);
     if (isMobile) setIsSidebarOpen(false);
   };
@@ -261,17 +309,17 @@ function App() {
     setCurrentView('DASHBOARD');
   };
 
-  const NavItem = ({ view, icon: Icon, label }: { view: ViewState, icon: any, label: string }) => (
+  const NavItem = ({ view, icon: Icon, labelKey }: { view: ViewState, icon: any, labelKey: string }) => (
     <button 
       onClick={() => handleNavigate(view)}
-      className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
+      className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors text-left ${
         currentView === view && !selectedStudent
-          ? 'bg-blue-600 text-white shadow-md shadow-blue-200' 
-          : 'text-slate-600 hover:bg-slate-100'
+          ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/20 font-semibold' 
+          : 'text-slate-400 hover:bg-slate-800 hover:text-white'
       }`}
     >
-      <Icon size={20} />
-      <span className="font-medium">{label}</span>
+      <Icon size={20} className={currentView === view ? 'text-white' : 'text-slate-500 group-hover:text-white'} />
+      <span className="font-medium">{t(labelKey)}</span>
     </button>
   );
 
@@ -280,7 +328,7 @@ function App() {
   }
 
   return (
-    <div className="flex h-screen bg-slate-50 overflow-hidden">
+    <div className="flex h-screen bg-slate-50 overflow-hidden" dir={dir}>
       {/* Mobile Overlay with Backdrop Blur */}
       {isMobile && isSidebarOpen && (
         <div 
@@ -292,72 +340,92 @@ function App() {
 
       {/* Sidebar with Smooth Slide-in */}
       <aside 
-        className={`fixed md:static inset-y-0 left-0 z-30 w-64 bg-white border-r border-slate-200 transform transition-transform duration-300 ease-in-out ${
-          isSidebarOpen ? 'translate-x-0 shadow-2xl md:shadow-none' : '-translate-x-full md:translate-x-0'
+        className={`fixed md:static inset-y-0 left-0 z-30 w-64 bg-slate-900 border-r border-slate-800 transform transition-transform duration-300 ease-in-out ${
+          isSidebarOpen ? 'translate-x-0 shadow-2xl md:shadow-none' : (dir === 'rtl' ? 'translate-x-full md:translate-x-0' : '-translate-x-full md:translate-x-0')
         } print:hidden`}
       >
         <div className="p-6 flex items-center justify-between">
-          <div className="flex items-center space-x-2 text-blue-700">
-            <GraduationCap size={28} />
-            <span className="text-xl font-bold tracking-tight">EduLog Pro</span>
+          <div className="flex items-center space-x-2 text-white">
+            <Shield size={28} className="text-indigo-500" />
+            <span className="text-xl font-bold tracking-tight">{t("app.name")}</span>
           </div>
           {isMobile && (
-             <button onClick={() => setIsSidebarOpen(false)} className="text-slate-400 hover:text-slate-600 transition-colors">
+             <button onClick={() => setIsSidebarOpen(false)} className="text-slate-400 hover:text-white transition-colors">
                <X size={24} />
              </button>
           )}
         </div>
 
         <nav className="px-4 space-y-2 mt-4">
-          <NavItem view="DASHBOARD" icon={LayoutDashboard} label="Dashboard" />
-          <NavItem view="NEW_LOG" icon={PlusCircle} label="New Entry" />
-          <NavItem view="STUDENTS_DIRECTORY" icon={BookUser} label="Students" />
-          <NavItem view="HISTORY" icon={FileText} label="History Logs" />
-          <NavItem view="BEHAVIOUR" icon={Star} label="Behaviour" />
-          <NavItem view="SEATING_PLAN" icon={LayoutGrid} label="Seating Plan" />
-          <NavItem view="REPORTS" icon={FileBarChart} label="Reports" />
-          <div className="pt-4 mt-4 border-t border-slate-100">
-            <p className="px-4 text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Specialized</p>
-            <NavItem view="SAFEGUARDING" icon={Shield} label="Safeguarding" />
+          <NavItem view="DASHBOARD" icon={LayoutDashboard} labelKey="nav.dashboard" />
+          <NavItem view="NEW_LOG" icon={PlusCircle} labelKey="nav.new_entry" />
+          <NavItem view="STUDENTS_DIRECTORY" icon={BookUser} labelKey="nav.students" />
+          <NavItem view="HISTORY" icon={FileText} labelKey="nav.history" />
+          <NavItem view="BEHAVIOUR" icon={Star} labelKey="nav.behaviour" />
+          <NavItem view="SEATING_PLAN" icon={LayoutGrid} labelKey="nav.seating" />
+          <NavItem view="REPORTS" icon={FileBarChart} labelKey="nav.reports" />
+          <div className="pt-4 mt-4 border-t border-slate-800">
+            <p className="px-4 text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">{t("nav.specialized")}</p>
+            <NavItem view="SAFEGUARDING" icon={Shield} labelKey="nav.safeguarding" />
           </div>
         </nav>
 
-        <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-slate-100 bg-slate-50">
-          <div className="flex items-center space-x-3 mb-3">
-            <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-white shadow-sm ${
-              currentUser.role === 'DSL' ? 'bg-red-500' : 'bg-blue-600'
-            }`}>
-              {currentUser.initials}
+        <div className="absolute bottom-0 left-0 right-0 bg-slate-900/50">
+           {/* Language Selector */}
+           <div className="px-4 py-2 border-t border-slate-800">
+              <div className="relative">
+                  <Globe className="absolute left-2 top-1/2 transform -translate-y-1/2 text-slate-400" size={14} />
+                  <select 
+                      value={language}
+                      onChange={(e) => setLanguage(e.target.value as Language)}
+                      className="w-full pl-8 pr-2 py-1.5 bg-slate-800 border border-slate-700 rounded text-xs text-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
+                  >
+                      <option value="en">{t('lang.en')}</option>
+                      <option value="ar">{t('lang.ar')}</option>
+                      <option value="fr">{t('lang.fr')}</option>
+                      <option value="es">{t('lang.es')}</option>
+                      <option value="de">{t('lang.de')}</option>
+                  </select>
+              </div>
+           </div>
+
+          <div className="p-4 border-t border-slate-800">
+            <div className="flex items-center space-x-3 mb-3">
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-white shadow-sm ring-2 ring-slate-800 ${
+                currentUser.role === 'DSL' ? 'bg-red-600' : 'bg-indigo-600'
+                }`}>
+                {currentUser.initials}
+                </div>
+                <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-white truncate">{currentUser.name}</p>
+                <p className="text-xs text-slate-400 truncate">{currentUser.role}</p>
+                </div>
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-slate-800 truncate">{currentUser.name}</p>
-              <p className="text-xs text-slate-500 truncate">{currentUser.role}</p>
-            </div>
+            <button 
+                onClick={handleLogout}
+                className="w-full flex items-center justify-center space-x-2 px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-300 text-sm hover:bg-slate-700 hover:text-white transition-colors"
+            >
+                <LogOut size={16} />
+                <span>{t("user.switch")}</span>
+            </button>
           </div>
-          <button 
-            onClick={handleLogout}
-            className="w-full flex items-center justify-center space-x-2 px-4 py-2 bg-white border border-slate-200 rounded-lg text-slate-600 text-sm hover:bg-slate-100 hover:text-red-600 transition-colors"
-          >
-            <LogOut size={16} />
-            <span>Switch User</span>
-          </button>
         </div>
       </aside>
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col h-screen overflow-hidden relative">
         {/* Mobile Header */}
-        <header className="bg-white border-b border-slate-200 p-4 flex md:hidden justify-between items-center print:hidden">
-           <div className="flex items-center space-x-2 text-blue-700">
-            <GraduationCap size={24} />
-            <span className="text-lg font-bold">EduLog Pro</span>
+        <header className="bg-slate-900 border-b border-slate-800 p-4 flex md:hidden justify-between items-center print:hidden">
+           <div className="flex items-center space-x-2 text-white">
+            <Shield size={24} className="text-indigo-500" />
+            <span className="text-lg font-bold">Sentinel</span>
           </div>
-          <button onClick={() => setIsSidebarOpen(true)} className="text-slate-600 hover:text-blue-600 transition-colors">
+          <button onClick={() => setIsSidebarOpen(true)} className="text-slate-400 hover:text-white transition-colors">
             <Menu size={24} />
           </button>
         </header>
 
-        <div className="flex-1 overflow-y-auto p-4 md:p-8 print:p-0 print:overflow-visible">
+        <div className="flex-1 overflow-y-auto p-4 md:p-8 print:p-0 print:overflow-visible bg-slate-50">
           <div className="max-w-5xl mx-auto print:max-w-none h-full">
             {currentView === 'DASHBOARD' && (
               <Dashboard 
@@ -375,6 +443,7 @@ function App() {
                 onSubmit={handleAddLog} 
                 onCancel={() => handleNavigate('DASHBOARD')}
                 currentUser={currentUser}
+                onEscalate={handleEscalateLog}
               />
             )}
 
@@ -401,7 +470,9 @@ function App() {
             )}
 
             {currentView === 'SEATING_PLAN' && (
-              <SeatingPlanView />
+              <SeatingPlanView 
+                behaviourEntries={behaviourEntries}
+              />
             )}
 
             {currentView === 'REPORTS' && (
@@ -430,14 +501,23 @@ function App() {
                 cases={safeguardingCases}
                 logs={logs}
                 onSave={handleAddSafeguardingCase}
+                onUpdate={handleUpdateSafeguardingCase}
                 onDelete={handleDeleteSafeguardingCase}
                 onCancel={() => handleNavigate('DASHBOARD')}
                 currentUser={currentUser}
                 initialSearchTerm={selectedStudent || ''}
+                initialData={escalationData}
               />
             )}
           </div>
         </div>
+        
+        {/* Floating Global AI Assistant */}
+        <SentinelChat 
+            logs={logs} 
+            safeguarding={safeguardingCases} 
+            behavior={behaviourEntries} 
+        />
       </main>
     </div>
   );

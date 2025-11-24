@@ -1,4 +1,5 @@
 
+
 export enum MeetingType {
   IEP = 'IEP Meeting',
   PARENT_TEACHER = 'Parent-Teacher Conference',
@@ -73,6 +74,9 @@ export interface SafeguardingCase {
   status: 'Open' | 'Investigating' | 'Closed';
   createdBy?: string; // Name of the user who filed this case
   isConfidential?: boolean; // New flag for sensitive cases
+  resolutionNotes?: string; // Notes on how the case was resolved
+  completedSteps?: string[]; // Array of completed next steps/actions
+  updatedAt?: string; // Timestamp of last update
 }
 
 export interface GeneratedReport {
@@ -84,6 +88,14 @@ export interface GeneratedReport {
   areasForGrowth: string[];
   attendanceTrend: string; // e.g. "Consistent", "Declining"
   actionPlan: string[];
+}
+
+export interface RiskAlert {
+  studentName: string;
+  riskScore: number; // 0-100
+  riskFactor: string; // e.g. "Sudden Isolation + Negative Sentiment"
+  details: string; // "3 negative logs in 1 week + recess isolation"
+  suggestedIntervention: string;
 }
 
 export interface Desk {

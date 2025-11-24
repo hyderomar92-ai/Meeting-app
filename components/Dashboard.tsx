@@ -1,13 +1,16 @@
-import React, { useMemo } from 'react';
-import { MeetingLog, MeetingType, UserProfile, SafeguardingCase, BehaviourEntry } from '../types';
+
+import React, { useMemo, useState } from 'react';
+import { MeetingLog, MeetingType, UserProfile, SafeguardingCase, BehaviourEntry, RiskAlert, ViewState } from '../types';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
-import { Users, Calendar, ClipboardList, AlertCircle, User as UserIcon, Shield, ChevronRight, TrendingUp, TrendingDown, Star, BarChart2, Activity } from 'lucide-react';
+import { Users, Calendar, ClipboardList, AlertCircle, User as UserIcon, Shield, ChevronRight, TrendingUp, TrendingDown, Star, BarChart2, Activity, Zap, BrainCircuit, Loader2, ArrowRight } from 'lucide-react';
+import { scanForRisks } from '../services/geminiService';
+import { useLanguage } from '../contexts/LanguageContext';
 
 interface DashboardProps {
   logs: MeetingLog[];
   safeguardingCases: SafeguardingCase[];
   behaviourEntries: BehaviourEntry[];
-  onNavigate: (view: any) => void;
+  onNavigate: (view: ViewState, studentName?: string) => void;
   currentUser: UserProfile;
 }
 
@@ -15,8 +18,14 @@ const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d'
 const RISK_COLORS = { Low: '#4ade80', Medium: '#facc15', High: '#fb923c', Critical: '#f87171' };
 
 const Dashboard: React.FC<DashboardProps> = ({ logs, safeguardingCases, behaviourEntries, onNavigate, currentUser }) => {
-  
+  const { t, language } = useLanguage();
   const isLeader = ['Head of Year', 'DSL', 'Admin'].includes(currentUser.role);
+
+  // Sentinel State
+  const [isScanning, setIsScanning] = useState(false);
+  const [riskAlerts, setRiskAlerts] = useState<RiskAlert[]>([]);
+  const [hasScanned, setHasScanned] = useState(false);
+  const [scanError, setScanError] = useState<string | null>(null);
 
   // --- Common Stats ---
   const totalMeetings = logs.length;
@@ -76,6 +85,23 @@ const Dashboard: React.FC<DashboardProps> = ({ logs, safeguardingCases, behaviou
   const logsToDisplay = isLeader ? logs : (myLogs.length > 0 ? myLogs : logs);
   const recentLogs = [...logsToDisplay].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 5);
 
+  const handleRunSentinel = async () => {
+      setIsScanning(true);
+      setScanError(null);
+      setHasScanned(false);
+      try {
+          // Pass current language to service
+          const results = await scanForRisks(logs, behaviourEntries, language);
+          setRiskAlerts(results);
+          setHasScanned(true);
+      } catch (e) {
+          console.error(e);
+          setScanError("Sentinel scan failed to complete. Please check your connection and try again.");
+      } finally {
+          setIsScanning(false);
+      }
+  };
+
   return (
     <div className="space-y-6 animate-fade-in">
       <header className="mb-8 flex flex-col md:flex-row md:items-end justify-between gap-4">
@@ -84,12 +110,12 @@ const Dashboard: React.FC<DashboardProps> = ({ logs, safeguardingCases, behaviou
              <span>{new Date().toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
            </div>
            <h1 className="text-3xl font-bold text-slate-800">
-             {isLeader ? 'Executive Dashboard' : 'My Dashboard'}
+             {isLeader ? 'Executive Dashboard' : t('dashboard.title')}
            </h1>
            <p className="text-slate-500 mt-1">
              {isLeader 
                 ? `Overview for ${currentUser.role} • ${currentUser.name}`
-                : `Welcome back, ${currentUser.name}. Here are your recent updates.`
+                : `${t('dashboard.welcome')}, ${currentUser.name}.`
              }
            </p>
         </div>
@@ -108,11 +134,144 @@ const Dashboard: React.FC<DashboardProps> = ({ logs, safeguardingCases, behaviou
         )}
       </header>
 
-      {/* Critical Alerts Banner */}
-      {activeHighRiskCount > 0 && (
+      {/* --- PREDICTIVE SAFEGUARDING SENTINEL (Leadership Only) --- */}
+      {isLeader && (
+        <div className="bg-slate-900 rounded-xl overflow-hidden shadow-lg border border-slate-800 mb-8 text-white relative">
+            <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none">
+                <BrainCircuit size={120} />
+            </div>
+            <div className="p-6 relative z-10">
+                <div className="flex justify-between items-start mb-4">
+                    <div>
+                        <div className="flex items-center space-x-2 mb-2">
+                            <Zap className="text-indigo-400" size={24} />
+                            <h2 className="text-xl font-bold text-white tracking-wide">Predictive Safeguarding Sentinel</h2>
+                        </div>
+                        <p className="text-slate-400 text-sm max-w-xl">
+                            AI scans logs and behavior data in real-time to flag "emerging risks" before they become crises.
+                        </p>
+                    </div>
+                    <button 
+                        onClick={handleRunSentinel}
+                        disabled={isScanning}
+                        className={`px-5 py-2.5 rounded-lg font-bold text-sm shadow-lg transition-all flex items-center ${
+                            isScanning 
+                            ? 'bg-indigo-900 text-indigo-300 cursor-not-allowed' 
+                            : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-900/50'
+                        }`}
+                    >
+                        {isScanning ? <Loader2 size={16} className="animate-spin mr-2" /> : <Activity size={16} className="mr-2" />}
+                        {isScanning ? 'Scanning Data...' : 'Scan for Risks'}
+                    </button>
+                </div>
+
+                {scanError && (
+                    <div className="bg-red-500/20 border border-red-500/50 text-red-200 p-3 rounded-lg flex items-center mb-4">
+                        <AlertCircle size={18} className="mr-2 text-red-400" />
+                        <span className="text-sm font-medium">{scanError}</span>
+                    </div>
+                )}
+
+                {hasScanned && riskAlerts.length === 0 && !scanError && (
+                    <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700 flex items-center text-green-400">
+                        <Shield size={20} className="mr-3" />
+                        <span className="font-medium">No high-risk patterns detected in the last 30 days.</span>
+                    </div>
+                )}
+
+                {hasScanned && riskAlerts.length > 0 && !scanError && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 animate-slide-up">
+                        {riskAlerts.map((alert, idx) => (
+                            <div key={idx} className="bg-slate-800 rounded-lg p-4 border border-red-500/30 hover:border-red-500/60 transition-colors">
+                                <div className="flex justify-between items-start mb-2">
+                                    <h3 className="font-bold text-lg text-white">{alert.studentName}</h3>
+                                    <span className={`px-2 py-0.5 rounded text-xs font-bold uppercase ${
+                                        alert.riskScore > 80 ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'bg-orange-500/20 text-orange-400 border border-orange-500/30'
+                                    }`}>
+                                        Risk Score: {alert.riskScore}%
+                                    </span>
+                                </div>
+                                <div className="mb-2">
+                                    <p className="text-xs text-indigo-300 font-bold uppercase tracking-wider mb-1">Pattern Detected</p>
+                                    <p className="text-sm text-slate-200 font-medium flex items-start">
+                                        <AlertCircle size={14} className="mr-2 mt-0.5 text-red-400 flex-shrink-0" />
+                                        {alert.riskFactor}
+                                    </p>
+                                    <p className="text-xs text-slate-400 ml-6 mt-1">{alert.details}</p>
+                                </div>
+                                <div className="mt-3 pt-3 border-t border-slate-700/50">
+                                     <p className="text-xs text-indigo-300 font-bold uppercase tracking-wider mb-1">AI Recommendation</p>
+                                     <p className="text-sm text-green-400">{alert.suggestedIntervention}</p>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+        </div>
+      )}
+
+      {/* Critical Risks Watchlist (Leadership) */}
+      {isLeader && activeHighRiskCount > 0 && (
+        <div className="bg-red-50 rounded-xl border border-red-200 overflow-hidden mb-8 animate-fade-in shadow-sm">
+            <div className="p-4 bg-red-100/50 border-b border-red-200 flex justify-between items-center">
+                <div className="flex items-center space-x-2 text-red-800">
+                    <Shield size={20} className="text-red-600" />
+                    <h3 className="font-bold">Critical Safeguarding Attention Required ({activeHighRiskCount})</h3>
+                </div>
+                <button 
+                  onClick={() => onNavigate('SAFEGUARDING')} 
+                  className="text-xs font-bold text-red-700 hover:text-red-900 flex items-center bg-white/60 hover:bg-white px-3 py-1.5 rounded-lg transition-colors border border-red-100"
+                >
+                    View All Cases <ArrowRight size={14} className="ml-1" />
+                </button>
+            </div>
+            <div className="divide-y divide-red-100/50">
+                {criticalCases.map(c => (
+                    <div 
+                      key={c.id} 
+                      className="p-4 hover:bg-red-100/40 transition-colors flex flex-col sm:flex-row sm:items-center justify-between cursor-pointer group" 
+                      onClick={() => onNavigate('SAFEGUARDING', c.studentName)}
+                    >
+                        <div className="flex items-center space-x-4 mb-2 sm:mb-0">
+                             <div className="w-10 h-10 rounded-full bg-white border-2 border-red-100 flex items-center justify-center text-red-600 font-bold shadow-sm group-hover:border-red-200">
+                                {c.studentName.charAt(0)}
+                             </div>
+                             <div>
+                                <p className="font-bold text-slate-800 text-sm">{c.studentName}</p>
+                                <div className="flex items-center text-xs text-red-600/80 font-medium mt-0.5">
+                                   <span>{c.incidentType}</span>
+                                   <span className="mx-2">•</span>
+                                   <span>{new Date(c.date).toLocaleDateString()}</span>
+                                </div>
+                             </div>
+                        </div>
+                        <div className="flex items-center justify-between sm:justify-end w-full sm:w-auto pl-14 sm:pl-0">
+                             <p className="text-xs text-slate-500 mr-4 hidden sm:block line-clamp-1 max-w-[250px] italic">
+                               {c.generatedReport.dslSummary}
+                             </p>
+                             <div className="flex items-center">
+                                <span className={`px-2.5 py-1 text-[10px] font-bold uppercase rounded-full border shadow-sm ${
+                                  c.generatedReport.riskLevel === 'Critical' 
+                                    ? 'bg-red-500 text-white border-red-600' 
+                                    : 'bg-orange-100 text-orange-700 border-orange-200'
+                                }`}>
+                                    {c.generatedReport.riskLevel} Risk
+                                </span>
+                                <ChevronRight size={16} className="text-slate-300 ml-2 group-hover:text-red-400 transition-colors" />
+                             </div>
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </div>
+      )}
+
+      {/* Standard Action Required Banner (Non-Leaders or general notification) */}
+      {!isLeader && activeHighRiskCount > 0 && (
         <div 
           onClick={() => onNavigate('SAFEGUARDING')}
-          className="bg-red-50 border border-red-200 rounded-xl p-4 flex flex-col sm:flex-row items-center justify-between cursor-pointer hover:bg-red-100 transition-colors animate-pulse-subtle shadow-sm"
+          className="bg-red-50 border border-red-200 rounded-xl p-4 flex flex-col sm:flex-row items-center justify-between cursor-pointer hover:bg-red-100 transition-colors animate-pulse-subtle shadow-sm mb-8"
         >
           <div className="flex items-center space-x-4 mb-3 sm:mb-0">
              <div className="p-3 bg-red-100 text-red-600 rounded-full shadow-sm ring-2 ring-red-200">
