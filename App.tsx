@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { ViewState, MeetingLog, MeetingType, SafeguardingCase, UserProfile, BehaviourEntry } from './types';
+import { ViewState, MeetingLog, MeetingType, SafeguardingCase, UserProfile, BehaviourEntry, Organization } from './types';
 import Dashboard from './components/Dashboard';
 import MeetingForm from './components/MeetingForm';
 import HistoryView from './components/HistoryView';
@@ -12,7 +12,13 @@ import LoginView from './components/LoginView';
 import BehaviourManager from './components/BehaviourManager';
 import SeatingPlanView from './components/SeatingPlanView';
 import SentinelChat from './components/SentinelChat';
-import { LayoutDashboard, PlusCircle, Users, Menu, X, Shield, FileText, BookUser, FileBarChart, LogOut, Star, LayoutGrid, Globe } from 'lucide-react';
+import SuperAdminDashboard from './components/SuperAdminDashboard';
+import SuperAdminTenants from './components/SuperAdminTenants';
+import SuperAdminAIMonitor from './components/SuperAdminAIMonitor';
+import SuperAdminSecurity from './components/SuperAdminSecurity';
+import SuperAdminTools from './components/SuperAdminTools';
+import OrgAdminSettings from './components/OrgAdminSettings';
+import { LayoutDashboard, PlusCircle, Users, Menu, X, Shield, FileText, BookUser, FileBarChart, LogOut, Star, LayoutGrid, Globe, Building2, Settings, BrainCircuit, ShieldAlert, Sliders, Eye } from 'lucide-react';
 import { STUDENTS } from './data/students';
 import { useLanguage, Language } from './contexts/LanguageContext';
 
@@ -117,6 +123,23 @@ const MOCK_SAFEGUARDING_CASES: SafeguardingCase[] = [
   }
 ];
 
+const MOCK_ORGANIZATIONS: Organization[] = [
+    { 
+        id: 'org1', name: 'Springfield High', type: 'School', status: 'Active', licenseTier: 'Enterprise', 
+        staffCount: 45, studentCount: 1200, renewalDate: '2024-09-01',
+        tokenUsageCurrentPeriod: 450000, tokenLimit: 1000000, aiCostEstimate: 4.50,
+        features: { safeguarding: true, aiAssistant: true, parentPortal: true },
+        churnRisk: 'Low'
+    },
+    { 
+        id: 'org2', name: 'Westfield College', type: 'College', status: 'Trial', licenseTier: 'Pro', 
+        staffCount: 20, studentCount: 450, renewalDate: '2024-05-15',
+        tokenUsageCurrentPeriod: 12000, tokenLimit: 500000, aiCostEstimate: 0.12,
+        features: { safeguarding: true, aiAssistant: false, parentPortal: false },
+        churnRisk: 'High'
+    },
+];
+
 function App() {
   const { t, language, setLanguage, dir } = useLanguage();
 
@@ -129,6 +152,9 @@ function App() {
           return null;
       }
   });
+
+  // SUPER ADMIN IMPERSONATION STATE
+  const [realAdminUser, setRealAdminUser] = useState<UserProfile | null>(null);
 
   const [currentView, setCurrentView] = useState<ViewState>('DASHBOARD');
   
@@ -159,6 +185,25 @@ function App() {
       return [];
     }
   });
+
+  // Admin Data States
+  const [organizations, setOrganizations] = useState<Organization[]>(() => {
+      try {
+          const saved = localStorage.getItem('sentinel_organizations');
+          return saved ? JSON.parse(saved) : MOCK_ORGANIZATIONS;
+      } catch {
+          return MOCK_ORGANIZATIONS;
+      }
+  });
+  
+  const [allUsers, setAllUsers] = useState<UserProfile[]>(() => {
+       try {
+        const saved = localStorage.getItem('sentinel_users');
+        return saved ? JSON.parse(saved) : [];
+       } catch {
+           return [];
+       }
+  });
   
   const [selectedStudent, setSelectedStudent] = useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -176,20 +221,12 @@ function App() {
       }
   }, [currentUser]);
 
-  // Save logs to LocalStorage whenever they change
-  useEffect(() => {
-    localStorage.setItem('sentinel_logs', JSON.stringify(logs));
-  }, [logs]);
-
-  // Save safeguarding cases
-  useEffect(() => {
-    localStorage.setItem('sentinel_safeguarding', JSON.stringify(safeguardingCases));
-  }, [safeguardingCases]);
-
-  // Save behavior entries
-  useEffect(() => {
-    localStorage.setItem('sentinel_behaviour', JSON.stringify(behaviourEntries));
-  }, [behaviourEntries]);
+  // Persistence Hooks
+  useEffect(() => { localStorage.setItem('sentinel_logs', JSON.stringify(logs)); }, [logs]);
+  useEffect(() => { localStorage.setItem('sentinel_safeguarding', JSON.stringify(safeguardingCases)); }, [safeguardingCases]);
+  useEffect(() => { localStorage.setItem('sentinel_behaviour', JSON.stringify(behaviourEntries)); }, [behaviourEntries]);
+  useEffect(() => { localStorage.setItem('sentinel_organizations', JSON.stringify(organizations)); }, [organizations]);
+  useEffect(() => { localStorage.setItem('sentinel_users', JSON.stringify(allUsers)); }, [allUsers]);
 
   useEffect(() => {
     const handleResize = () => {
@@ -300,16 +337,50 @@ function App() {
 
   const handleLogin = (user: UserProfile) => {
     setCurrentUser(user);
-    setCurrentView('DASHBOARD');
+    setRealAdminUser(null); // Clear any previous impersonation
+    if (user.role === 'Super Admin') {
+        setCurrentView('SUPER_ADMIN_DASHBOARD');
+    } else {
+        setCurrentView('DASHBOARD');
+    }
   };
 
   const handleLogout = () => {
     setCurrentUser(null);
+    setRealAdminUser(null);
     setSelectedStudent(null);
     setCurrentView('DASHBOARD');
   };
 
-  const NavItem = ({ view, icon: Icon, labelKey }: { view: ViewState, icon: any, labelKey: string }) => (
+  // --- IMPERSONATION LOGIC ---
+  const handleImpersonate = (orgId: string) => {
+      const org = organizations.find(o => o.id === orgId);
+      if (!org || !currentUser) return;
+
+      setRealAdminUser(currentUser); // Store the real admin
+      
+      // Create a temporary admin user for that org
+      const tempUser: UserProfile = {
+          id: `temp-${orgId}`,
+          name: `${org.name} Admin (Ghost)`,
+          role: 'Admin',
+          initials: 'GA',
+          orgId: orgId
+      };
+      
+      setCurrentUser(tempUser);
+      setCurrentView('DASHBOARD'); // Go to their dashboard
+  };
+
+  const stopImpersonation = () => {
+      if (realAdminUser) {
+          setCurrentUser(realAdminUser);
+          setRealAdminUser(null);
+          setCurrentView('SUPER_ADMIN_TENANTS');
+      }
+  };
+
+  const NavItem = ({ view, icon: Icon, labelKey, customLabel }: { view: ViewState, icon: any, labelKey?: string, customLabel?: string }) => (
     <button 
       onClick={() => handleNavigate(view)}
       className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors text-left ${
@@ -319,7 +390,7 @@ function App() {
       }`}
     >
       <Icon size={20} className={currentView === view ? 'text-white' : 'text-slate-500 group-hover:text-white'} />
-      <span className="font-medium">{t(labelKey)}</span>
+      <span className="font-medium">{customLabel || (labelKey ? t(labelKey) : '')}</span>
     </button>
   );
 
@@ -357,17 +428,40 @@ function App() {
         </div>
 
         <nav className="px-4 space-y-2 mt-4">
-          <NavItem view="DASHBOARD" icon={LayoutDashboard} labelKey="nav.dashboard" />
-          <NavItem view="NEW_LOG" icon={PlusCircle} labelKey="nav.new_entry" />
-          <NavItem view="STUDENTS_DIRECTORY" icon={BookUser} labelKey="nav.students" />
-          <NavItem view="HISTORY" icon={FileText} labelKey="nav.history" />
-          <NavItem view="BEHAVIOUR" icon={Star} labelKey="nav.behaviour" />
-          <NavItem view="SEATING_PLAN" icon={LayoutGrid} labelKey="nav.seating" />
-          <NavItem view="REPORTS" icon={FileBarChart} labelKey="nav.reports" />
-          <div className="pt-4 mt-4 border-t border-slate-800">
-            <p className="px-4 text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">{t("nav.specialized")}</p>
-            <NavItem view="SAFEGUARDING" icon={Shield} labelKey="nav.safeguarding" />
-          </div>
+          {currentUser.role === 'Super Admin' ? (
+              /* SUPER ADMIN NAVIGATION - EXPANDED */
+              <>
+                <p className="px-4 text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Platform</p>
+                <NavItem view="SUPER_ADMIN_DASHBOARD" icon={Building2} customLabel="Command Center" />
+                <NavItem view="SUPER_ADMIN_TENANTS" icon={Globe} customLabel="Organizations" />
+                <NavItem view="SUPER_ADMIN_TOOLS" icon={Sliders} customLabel="Ops & Tools" />
+                
+                <p className="px-4 text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 mt-4">Intelligence</p>
+                <NavItem view="SUPER_ADMIN_AI" icon={BrainCircuit} customLabel="Sentinel Cortex" />
+                
+                <p className="px-4 text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 mt-4">Compliance</p>
+                <NavItem view="SUPER_ADMIN_SECURITY" icon={ShieldAlert} customLabel="Audit & Security" />
+              </>
+          ) : (
+             /* STANDARD SCHOOL NAVIGATION */
+             <>
+                <NavItem view="DASHBOARD" icon={LayoutDashboard} labelKey="nav.dashboard" />
+                <NavItem view="NEW_LOG" icon={PlusCircle} labelKey="nav.new_entry" />
+                <NavItem view="STUDENTS_DIRECTORY" icon={BookUser} labelKey="nav.students" />
+                <NavItem view="HISTORY" icon={FileText} labelKey="nav.history" />
+                <NavItem view="BEHAVIOUR" icon={Star} labelKey="nav.behaviour" />
+                <NavItem view="SEATING_PLAN" icon={LayoutGrid} labelKey="nav.seating" />
+                <NavItem view="REPORTS" icon={FileBarChart} labelKey="nav.reports" />
+                <div className="pt-4 mt-4 border-t border-slate-800">
+                    <p className="px-4 text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">{t("nav.specialized")}</p>
+                    <NavItem view="SAFEGUARDING" icon={Shield} labelKey="nav.safeguarding" />
+                    
+                    {currentUser.role === 'Admin' && (
+                        <NavItem view="ORG_SETTINGS" icon={Settings} customLabel="Org Settings" />
+                    )}
+                </div>
+             </>
+          )}
         </nav>
 
         <div className="absolute bottom-0 left-0 right-0 bg-slate-900/50">
@@ -392,7 +486,7 @@ function App() {
           <div className="p-4 border-t border-slate-800">
             <div className="flex items-center space-x-3 mb-3">
                 <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-white shadow-sm ring-2 ring-slate-800 ${
-                currentUser.role === 'DSL' ? 'bg-red-600' : 'bg-indigo-600'
+                currentUser.role === 'DSL' ? 'bg-red-600' : currentUser.role === 'Super Admin' ? 'bg-amber-500' : 'bg-indigo-600'
                 }`}>
                 {currentUser.initials}
                 </div>
@@ -414,6 +508,22 @@ function App() {
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col h-screen overflow-hidden relative">
+        {/* IMPERSONATION BANNER */}
+        {realAdminUser && (
+            <div className="bg-amber-500 text-slate-900 px-4 py-2 font-bold flex justify-between items-center shadow-lg z-50">
+                <div className="flex items-center">
+                    <Eye className="mr-2" />
+                    <span>GHOST MODE: You are impersonating {currentUser.name}. Actions will be logged.</span>
+                </div>
+                <button 
+                    onClick={stopImpersonation}
+                    className="px-4 py-1 bg-slate-900 text-white rounded hover:bg-slate-800 text-sm"
+                >
+                    Return to Command
+                </button>
+            </div>
+        )}
+
         {/* Mobile Header */}
         <header className="bg-slate-900 border-b border-slate-800 p-4 flex md:hidden justify-between items-center print:hidden">
            <div className="flex items-center space-x-2 text-white">
@@ -426,7 +536,42 @@ function App() {
         </header>
 
         <div className="flex-1 overflow-y-auto p-4 md:p-8 print:p-0 print:overflow-visible bg-slate-50">
-          <div className="max-w-5xl mx-auto print:max-w-none h-full">
+          <div className="max-w-7xl mx-auto print:max-w-none h-full">
+            {currentView === 'SUPER_ADMIN_DASHBOARD' && (
+                <SuperAdminDashboard 
+                    organizations={organizations}
+                />
+            )}
+
+            {currentView === 'SUPER_ADMIN_TENANTS' && (
+                <SuperAdminTenants 
+                    organizations={organizations}
+                    onAddOrg={(org) => setOrganizations([...organizations, org])}
+                    onUpdateOrg={(org) => setOrganizations(organizations.map(o => o.id === org.id ? org : o))}
+                    onImpersonate={handleImpersonate}
+                />
+            )}
+
+            {currentView === 'SUPER_ADMIN_AI' && (
+                <SuperAdminAIMonitor organizations={organizations} />
+            )}
+
+            {currentView === 'SUPER_ADMIN_SECURITY' && (
+                <SuperAdminSecurity />
+            )}
+
+            {currentView === 'SUPER_ADMIN_TOOLS' && (
+                <SuperAdminTools />
+            )}
+
+            {currentView === 'ORG_SETTINGS' && (
+                <OrgAdminSettings 
+                    currentUser={currentUser}
+                    users={allUsers} // In real app filter by currentUser.orgId
+                    onUpdateUsers={setAllUsers}
+                />
+            )}
+
             {currentView === 'DASHBOARD' && (
               <Dashboard 
                 logs={logs} 
@@ -472,6 +617,7 @@ function App() {
             {currentView === 'SEATING_PLAN' && (
               <SeatingPlanView 
                 behaviourEntries={behaviourEntries}
+                safeguardingCases={safeguardingCases}
               />
             )}
 
@@ -512,12 +658,14 @@ function App() {
           </div>
         </div>
         
-        {/* Floating Global AI Assistant */}
-        <SentinelChat 
-            logs={logs} 
-            safeguarding={safeguardingCases} 
-            behavior={behaviourEntries} 
-        />
+        {/* Floating Global AI Assistant - Only for School Users */}
+        {currentUser.role !== 'Super Admin' && (
+             <SentinelChat 
+                logs={logs} 
+                safeguarding={safeguardingCases} 
+                behavior={behaviourEntries} 
+            />
+        )}
       </main>
     </div>
   );

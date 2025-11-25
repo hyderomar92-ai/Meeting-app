@@ -2,7 +2,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { MeetingType, MeetingLog, ActionItem, UserProfile } from '../types';
 import { analyzeLogEntry, generateSmartActions } from '../services/geminiService';
-import { Sparkles, Save, X, Plus, Loader2, User, AlertCircle, Mic, MicOff, FileText, Zap, ShieldAlert, ArrowRight } from 'lucide-react';
+import { Sparkles, Save, X, Plus, Loader2, User, AlertCircle, Mic, MicOff, FileText, Zap, ShieldAlert, ArrowRight, Tag, Check, Cloud } from 'lucide-react';
 import { STUDENTS } from '../data/students';
 import { useLanguage } from '../contexts/LanguageContext';
 
@@ -21,6 +21,10 @@ const TEMPLATES: Record<string, string> = {
   [MeetingType.IEP]: `Current IEP Goals Review: \n\nProgress Data: \n\nProposed Adjustments: \n\nServices Required: `,
   'General': `Topic: \n\nKey Points Discussed: \n\nNext Steps: `
 };
+
+const CONTEXT_TAGS = [
+    "Classroom", "Playground", "Corridor", "Online", "Canteen", "Bus", "Exam Hall", "Library"
+];
 
 const MeetingForm: React.FC<MeetingFormProps> = ({ onSubmit, onCancel, initialAttendees = [], currentUser, onEscalate }) => {
   const { t, language } = useLanguage();
@@ -49,7 +53,21 @@ const MeetingForm: React.FC<MeetingFormProps> = ({ onSubmit, onCancel, initialAt
   const [speechError, setSpeechError] = useState<string | null>(null);
   const recognitionRef = useRef<any>(null);
   
+  // Autosave visual state (simulated)
+  const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved');
+  
   const wrapperRef = useRef<HTMLDivElement>(null);
+
+  // Simulated Auto-save trigger
+  useEffect(() => {
+      if (rawNotes) {
+          setSaveStatus('saving');
+          const timer = setTimeout(() => {
+              setSaveStatus('saved');
+          }, 1000);
+          return () => clearTimeout(timer);
+      }
+  }, [rawNotes, attendees, type, date]);
 
   // Initialize Speech Recognition
   useEffect(() => {
@@ -177,6 +195,14 @@ const MeetingForm: React.FC<MeetingFormProps> = ({ onSubmit, onCancel, initialAt
       setRawNotes(prev => prev ? `${prev}\n\n---\n${template}` : template);
   };
 
+  const addContextTag = (tag: string) => {
+      setLocation(tag);
+      if (!rawNotes.includes(tag)) {
+          // Optionally append to notes, but setting location state is often enough
+          // setRawNotes(prev => prev + (prev ? `\n[Location: ${tag}]` : `[Location: ${tag}]`));
+      }
+  };
+
   const handleEnhance = async () => {
     if (!rawNotes.trim()) return;
     setIsEnhancing(true);
@@ -254,9 +280,6 @@ const MeetingForm: React.FC<MeetingFormProps> = ({ onSubmit, onCancel, initialAt
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Prevent submission if safeguarding detected but not escalated/acknowledged?
-    // For now, allow submit but warn.
-    
     const finalActionItems: ActionItem[] = actionItems
       .filter(i => i.trim() !== '')
       .map(item => ({
@@ -284,6 +307,19 @@ const MeetingForm: React.FC<MeetingFormProps> = ({ onSubmit, onCancel, initialAt
   return (
     <div className="max-w-4xl mx-auto bg-white rounded-xl shadow-sm border border-slate-200 p-6 md:p-8 animate-fade-in relative">
       
+      {/* Auto-save Status Indicator */}
+      <div className="absolute top-8 right-20 flex items-center text-xs text-slate-400">
+          {saveStatus === 'saving' ? (
+              <>
+                <Loader2 size={12} className="animate-spin mr-1" /> Saving draft...
+              </>
+          ) : saveStatus === 'saved' ? (
+              <>
+                <Cloud size={12} className="mr-1" /> Draft saved
+              </>
+          ) : null}
+      </div>
+
       {safeguardingFlag.detected && (
           <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between animate-pulse-subtle">
               <div className="flex items-start">
@@ -465,6 +501,27 @@ const MeetingForm: React.FC<MeetingFormProps> = ({ onSubmit, onCancel, initialAt
                    </button>
                 </div>
             </div>
+            
+            {/* Quick Context Tags */}
+            <div className="mt-3">
+                <p className="text-xs text-slate-400 font-bold uppercase mb-1 flex items-center"><Tag size={10} className="mr-1"/> Quick Context</p>
+                <div className="flex flex-wrap gap-2">
+                    {CONTEXT_TAGS.map(tag => (
+                        <button 
+                            key={tag}
+                            type="button"
+                            onClick={() => addContextTag(tag)}
+                            className={`text-xs px-2 py-1 rounded border transition-colors ${
+                                location === tag 
+                                ? 'bg-indigo-100 text-indigo-700 border-indigo-200 font-medium' 
+                                : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100'
+                            }`}
+                        >
+                            {tag}
+                        </button>
+                    ))}
+                </div>
+            </div>
           </div>
 
           {/* Right: Processed Output */}
@@ -481,7 +538,7 @@ const MeetingForm: React.FC<MeetingFormProps> = ({ onSubmit, onCancel, initialAt
                        </span>
                     )}
                   </label>
-                  {location && <span className="text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded">Loc: {location}</span>}
+                  {location && <span className="text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded border border-slate-200">Loc: {location}</span>}
               </div>
               <textarea 
                 value={summary}

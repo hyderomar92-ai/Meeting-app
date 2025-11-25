@@ -12,8 +12,33 @@ export enum MeetingType {
 export interface UserProfile {
   id: string;
   name: string;
-  role: 'Teacher' | 'Head of Year' | 'DSL' | 'Admin';
+  role: 'Teacher' | 'Head of Year' | 'DSL' | 'Admin' | 'Super Admin';
   initials: string;
+  orgId?: string;
+  email?: string;
+}
+
+export interface Organization {
+  id: string;
+  name: string;
+  type: 'School' | 'College' | 'University';
+  status: 'Active' | 'Trial' | 'Suspended';
+  licenseTier: 'Starter' | 'Pro' | 'Enterprise';
+  studentCount: number;
+  staffCount: number;
+  renewalDate: string;
+  logo?: string;
+  // New fields for AI Monitoring
+  tokenUsageCurrentPeriod: number;
+  tokenLimit: number;
+  aiCostEstimate: number;
+  // Feature Flags
+  features: {
+    safeguarding: boolean;
+    aiAssistant: boolean;
+    parentPortal: boolean;
+  };
+  churnRisk?: 'Low' | 'Medium' | 'High';
 }
 
 export interface ActionItem {
@@ -115,4 +140,55 @@ export interface SeatingLayout {
   updatedAt: string;
 }
 
-export type ViewState = 'DASHBOARD' | 'NEW_LOG' | 'HISTORY' | 'STUDENT_PROFILE' | 'STUDENTS_DIRECTORY' | 'SAFEGUARDING' | 'REPORTS' | 'BEHAVIOUR' | 'SEATING_PLAN';
+export type ViewState = 
+  | 'DASHBOARD' 
+  | 'NEW_LOG' 
+  | 'HISTORY' 
+  | 'STUDENT_PROFILE' 
+  | 'STUDENTS_DIRECTORY' 
+  | 'SAFEGUARDING' 
+  | 'REPORTS' 
+  | 'BEHAVIOUR' 
+  | 'SEATING_PLAN' 
+  | 'SUPER_ADMIN_DASHBOARD' 
+  | 'SUPER_ADMIN_TENANTS'
+  | 'SUPER_ADMIN_AI'
+  | 'SUPER_ADMIN_SECURITY'
+  | 'SUPER_ADMIN_TOOLS'
+  | 'ORG_SETTINGS';
+
+export interface Student {
+  id: string;
+  name: string;
+  email?: string;
+  phone?: string;
+  studentClass?: string;
+  nationality?: string;
+  gender?: string;
+  qId?: string;
+  dob?: string;
+  
+  // Parent/Guardian Details
+  fatherName?: string;
+  fatherPhone?: string;
+  fatherEmail?: string;
+  motherName?: string;
+  motherPhone?: string;
+  motherEmail?: string;
+}
+
+// Admin Tools Types
+export interface LicenseKey {
+  key: string;
+  tier: 'Starter' | 'Pro' | 'Enterprise';
+  durationDays: number;
+  generatedDate: string;
+  status: 'Active' | 'Redeemed' | 'Revoked';
+  redeemedBy?: string; // Org ID
+}
+
+export interface GlobalAIConfig {
+  safeguardingSensitivity: 'Standard' | 'Strict' | 'Lenient';
+  baseSystemPrompt: string;
+  excludedKeywords: string[];
+}

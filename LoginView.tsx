@@ -1,13 +1,14 @@
+
 import React, { useState, useEffect } from 'react';
 import { UserProfile } from '../types';
-import { User, Shield, Briefcase, Plus, X, Save, Settings, Trash2, Edit2, Key, Building2, RefreshCw } from 'lucide-react';
+import { User, Shield, Briefcase, Plus, X, Save, Settings, Trash2, Edit2, Key } from 'lucide-react';
 
 const DEFAULT_USERS: UserProfile[] = [
-  { id: 'owner', name: 'System Owner', role: 'Super Admin', initials: 'SO' },
-  { id: 'admin', name: 'Principal Skinner', role: 'Admin', initials: 'PS' },
+  { id: 'u0', name: 'System Owner', role: 'Super Admin', initials: 'SO' },
   { id: 'u1', name: 'Jane Doe', role: 'Head of Year', initials: 'JD' },
   { id: 'u2', name: 'John Smith', role: 'Teacher', initials: 'JS' },
   { id: 'u3', name: 'Sarah Connor', role: 'DSL', initials: 'SC' },
+  { id: 'u4', name: 'Emily Blunt', role: 'Admin', initials: 'EB' },
 ];
 
 interface LoginViewProps {
@@ -37,25 +38,6 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
   useEffect(() => {
     localStorage.setItem('sentinel_users', JSON.stringify(users));
   }, [users]);
-
-  // Ensure critical roles exist (migration for existing users)
-  useEffect(() => {
-      const hasSuper = users.some(u => u.role === 'Super Admin');
-      const hasAdmin = users.some(u => u.role === 'Admin');
-      
-      if (!hasSuper || !hasAdmin) {
-          let updatedUsers = [...users];
-          // Add Super Admin if missing
-          if (!hasSuper) {
-              updatedUsers = [DEFAULT_USERS[0], ...updatedUsers];
-          }
-          // Add Org Admin if missing
-          if (!hasAdmin) {
-               updatedUsers = [...updatedUsers, DEFAULT_USERS[1]];
-          }
-          setUsers(updatedUsers);
-      }
-  }, []);
 
   const handleSaveUser = (e: React.FormEvent) => {
     e.preventDefault();
@@ -104,13 +86,6 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
     }
   };
 
-  const handleResetDefaults = () => {
-      if (window.confirm("This will reset the user list to defaults. Continue?")) {
-          setUsers(DEFAULT_USERS);
-          setMode('SELECT');
-      }
-  };
-
   const resetForm = () => {
     setMode('SELECT');
     setUserName('');
@@ -120,11 +95,10 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
 
   const renderRoleIcon = (role: string) => {
       switch(role) {
-          case 'Super Admin': return <Key size={14} className="mr-1.5 text-amber-500" />;
-          case 'Admin': return <Building2 size={14} className="mr-1.5 text-purple-500" />;
-          case 'DSL': return <Shield size={14} className="mr-1.5 text-red-500" />;
-          case 'Head of Year': return <Briefcase size={14} className="mr-1.5 text-blue-500" />;
-          default: return <User size={14} className="mr-1.5 text-slate-400" />;
+          case 'Super Admin': return <Key size={12} className="mr-1 text-amber-500" />;
+          case 'DSL': return <Shield size={12} className="mr-1" />;
+          case 'Head of Year': return <Briefcase size={12} className="mr-1" />;
+          default: return <User size={12} className="mr-1" />;
       }
   };
 
@@ -200,19 +174,15 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
                 >
                   <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold mr-4 transition-colors flex-shrink-0 ${
                     user.role === 'Super Admin' ? 'bg-slate-800 text-amber-400 ring-2 ring-amber-400/50' :
-                    user.role === 'Admin' ? 'bg-purple-100 text-purple-700' :
                     user.role === 'DSL' ? 'bg-red-100 text-red-600 group-hover:bg-red-200' : 
-                    user.role === 'Head of Year' ? 'bg-blue-100 text-blue-600 group-hover:bg-blue-200' :
-                    'bg-slate-100 text-slate-600 group-hover:bg-slate-200'
+                    user.role === 'Head of Year' ? 'bg-purple-100 text-purple-600 group-hover:bg-purple-200' :
+                    'bg-indigo-100 text-indigo-600 group-hover:bg-indigo-200'
                   }`}>
                     {user.initials}
                   </div>
                   <div className="text-left flex-1 min-w-0">
-                    <p className="text-slate-800 font-medium group-hover:text-indigo-700 truncate flex items-center">
-                        {user.name}
-                        {user.role === 'Super Admin' && <span className="ml-2 text-[10px] bg-amber-100 text-amber-700 px-1.5 rounded border border-amber-200">OWNER</span>}
-                    </p>
-                    <div className="flex items-center text-xs text-slate-500 mt-0.5">
+                    <p className="text-slate-800 font-medium group-hover:text-indigo-700 truncate">{user.name}</p>
+                    <div className="flex items-center text-xs text-slate-500">
                       {renderRoleIcon(user.role)}
                       {user.role}
                     </div>
@@ -267,7 +237,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
                   <option value="Teacher">Teacher</option>
                   <option value="Head of Year">Head of Year</option>
                   <option value="DSL">DSL (Safeguarding Lead)</option>
-                  <option value="Admin">School Admin</option>
+                  <option value="Admin">Admin</option>
                   <option value="Super Admin">App Owner</option>
                 </select>
               </div>
@@ -293,11 +263,10 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
         )}
 
         {mode === 'SELECT' && (
-            <div className="mt-8 pt-6 border-t border-slate-100 flex justify-between items-center text-xs text-slate-400">
-              <span>v1.2.0 • Secure Access</span>
-              <button onClick={handleResetDefaults} className="flex items-center hover:text-indigo-600 transition-colors">
-                  <RefreshCw size={12} className="mr-1" /> Reset Defaults
-              </button>
+            <div className="mt-8 pt-6 border-t border-slate-100 text-center">
+              <p className="text-xs text-slate-400">
+                Secure Access • 256-bit Encryption • GDPR Compliant
+              </p>
             </div>
         )}
       </div>

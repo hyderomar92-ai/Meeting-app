@@ -2,7 +2,7 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { SafeguardingCase, MeetingLog, UserProfile } from '../types';
 import { generateSafeguardingReport } from '../services/geminiService';
-import { Shield, AlertTriangle, FileText, Save, Loader2, Search, User, ChevronRight, ClipboardList, Gavel, Clock, Plus, Calendar, ArrowLeft, Filter, CheckCircle2, AlertCircle, Activity, Trash2, Tag, BarChart3, Paperclip, CheckSquare, Square, Sparkles, BrainCircuit, X, Lock, Eye, EyeOff, Copy, ChevronDown, Edit3 } from 'lucide-react';
+import { Shield, AlertTriangle, FileText, Save, Loader2, Search, User, ChevronRight, ClipboardList, Gavel, Clock, Plus, Calendar, ArrowLeft, Filter, CheckCircle2, AlertCircle, Activity, Trash2, Tag, BarChart3, Paperclip, CheckSquare, Square, Sparkles, BrainCircuit, X, Lock, Eye, EyeOff, Copy, ChevronDown, Edit3, History } from 'lucide-react';
 import { STUDENTS } from '../data/students';
 
 interface SafeguardingBuilderProps {
@@ -16,6 +16,15 @@ interface SafeguardingBuilderProps {
   initialSearchTerm?: string;
   initialData?: { studentName: string; description: string; date: string } | null;
 }
+
+// Mock Audit Data Generator
+const generateMockAccessLogs = (caseId: string, creator: string) => {
+    return [
+        { date: new Date().toISOString(), user: creator, action: 'Created Case' },
+        { date: new Date(Date.now() - 86400000).toISOString(), user: 'System Admin', action: 'Viewed' },
+        { date: new Date(Date.now() - 172800000).toISOString(), user: 'Sarah Connor', action: 'Updated Status' },
+    ];
+};
 
 const SafeguardingBuilder: React.FC<SafeguardingBuilderProps> = ({ cases, logs, onSave, onUpdate, onDelete, onCancel, currentUser, initialSearchTerm = '', initialData }) => {
   const [mode, setMode] = useState<'LIST' | 'BUILD'>('LIST');
@@ -472,6 +481,9 @@ const SafeguardingBuilder: React.FC<SafeguardingBuilderProps> = ({ cases, logs, 
       const completionPercentage = selectedCase.generatedReport.nextSteps.length > 0 
           ? Math.round(((selectedCase.completedSteps?.length || 0) / selectedCase.generatedReport.nextSteps.length) * 100)
           : 0;
+      
+      // Mock Access logs for the UI
+      const accessLogs = generateMockAccessLogs(selectedCase.id, selectedCase.createdBy || 'Admin');
 
       return (
           <div className="animate-fade-in max-w-5xl mx-auto bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden">
@@ -625,7 +637,7 @@ const SafeguardingBuilder: React.FC<SafeguardingBuilderProps> = ({ cases, logs, 
                                     {logs.filter(l => selectedCase.relatedLogIds?.includes(l.id)).map(log => (
                                         <div key={log.id} className="text-xs p-3 border border-slate-100 rounded-lg flex justify-between items-center bg-white hover:bg-slate-50">
                                             <div>
-                                                <span className="font-bold text-slate-700">{new Date(log.date).toLocaleDateString()}</p>
+                                                <span className="font-bold text-slate-700">{new Date(log.date).toLocaleDateString()}</span>
                                                 <span className="mx-2 text-slate-300">|</span>
                                                 <span className="text-slate-600">{log.type}</span>
                                             </div>
@@ -725,6 +737,31 @@ const SafeguardingBuilder: React.FC<SafeguardingBuilderProps> = ({ cases, logs, 
                         {selectedCase.generatedReport.policiesApplied.map((policy, i) => (<span key={i} className="px-3 py-1.5 bg-white border border-slate-200 text-slate-600 text-sm rounded-lg shadow-sm font-medium">{policy}</span>))}
                       </div>
                   </div>
+
+                  {/* Access Audit Log (Visual only for this demo) */}
+                  <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+                      <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wide mb-3 flex items-center"><History size={16} className="mr-2 text-slate-400" /> Access Audit Log</h3>
+                      <div className="overflow-x-auto">
+                          <table className="w-full text-xs text-left">
+                              <thead>
+                                  <tr className="text-slate-400 border-b border-slate-100">
+                                      <th className="pb-2 font-semibold">Timestamp</th>
+                                      <th className="pb-2 font-semibold">User</th>
+                                      <th className="pb-2 font-semibold">Action</th>
+                                  </tr>
+                              </thead>
+                              <tbody className="text-slate-600">
+                                  {accessLogs.map((log, i) => (
+                                      <tr key={i} className="border-b border-slate-50 last:border-0">
+                                          <td className="py-2 text-slate-400">{new Date(log.date).toLocaleString()}</td>
+                                          <td className="py-2 font-medium">{log.user}</td>
+                                          <td className="py-2">{log.action}</td>
+                                      </tr>
+                                  ))}
+                              </tbody>
+                          </table>
+                      </div>
+                  </div>
               </div>
           </div>
       );
@@ -769,7 +806,7 @@ const SafeguardingBuilder: React.FC<SafeguardingBuilderProps> = ({ cases, logs, 
                        <h3 className="text-xs font-bold text-slate-600 uppercase flex items-center tracking-wide"><Paperclip size={14} className="mr-1.5" /> Evidence Locker</h3>
                        <div className="flex bg-white rounded-lg p-0.5 border border-slate-200">
                           <button onClick={() => setEvidenceFilterType('ALL')} className={`px-3 py-1 text-[10px] font-bold rounded-md transition-all ${evidenceFilterType === 'ALL' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}>All History</button>
-                          <button onClick={() => setEvidenceFilterType('CONCERNS')} className={`px-3 py-1 text-[10px] font-bold rounded-md transition-all ${evidenceFilterType === 'CONCERNS' ? 'bg-red-500 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}>Concerns Only</button>
+                          <button onClick={() => setEvidenceFilterType('CONCERNS')} className={`px-3 py-1 text-[10px] font-bold rounded-md transition-all ${evidenceFilterType === 'CONCERNS' ? 'bg-red-50 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}>Concerns Only</button>
                        </div>
                     </div>
                     

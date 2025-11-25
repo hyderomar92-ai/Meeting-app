@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo } from 'react';
-import { Search, User, GraduationCap, Plus, Filter, CalendarRange } from 'lucide-react';
+import { Search, User, GraduationCap, Plus, Filter, CalendarRange, AlertTriangle, Shield } from 'lucide-react';
 import { STUDENTS } from '../data/students';
 
 interface StudentDirectoryProps {
@@ -35,6 +35,15 @@ const StudentDirectory: React.FC<StudentDirectoryProps> = ({ onSelectStudent, on
 
     return matchesSearch && matchesClass && matchesYear;
   });
+
+  // Mock function to simulate risk status checking (normally would pass this data in props)
+  const getRiskStatus = (studentId: string) => {
+      // Arbitrary simulation for visual demonstration based on ID
+      const numId = parseInt(studentId.replace(/\D/g, ''));
+      if (numId % 17 === 0) return 'HIGH';
+      if (numId % 11 === 0) return 'MEDIUM';
+      return 'NONE';
+  };
 
   return (
     <div className="animate-fade-in space-y-6">
@@ -104,44 +113,62 @@ const StudentDirectory: React.FC<StudentDirectoryProps> = ({ onSelectStudent, on
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {filteredStudents.map(student => (
-          <div
-            key={student.id}
-            onClick={() => onSelectStudent(student.name)}
-            className="bg-white p-4 rounded-xl border border-slate-200 hover:border-blue-500 hover:shadow-md transition-all text-left group cursor-pointer relative flex items-center justify-between"
-          >
-            <div className="flex items-center space-x-3 overflow-hidden">
-              <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 group-hover:bg-blue-50 group-hover:text-blue-600 transition-colors flex-shrink-0">
-                <User size={24} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <h3 className="font-semibold text-slate-800 group-hover:text-blue-700 truncate">{student.name}</h3>
-                <div className="flex flex-wrap items-center gap-2 mt-1">
-                    <span className="inline-flex items-center text-xs text-slate-500 bg-slate-50 px-2 py-0.5 rounded border border-slate-100">
-                        ID: {student.id}
-                    </span>
-                    {student.studentClass && (
-                        <span className="inline-flex items-center text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-100">
-                            <GraduationCap size={10} className="mr-1" />
-                            {student.studentClass}
-                        </span>
+        {filteredStudents.map(student => {
+          const risk = getRiskStatus(student.id);
+          return (
+            <div
+              key={student.id}
+              onClick={() => onSelectStudent(student.name)}
+              className={`bg-white p-4 rounded-xl border transition-all text-left group cursor-pointer relative flex items-center justify-between hover:shadow-md ${
+                  risk === 'HIGH' ? 'border-red-200 bg-red-50/20' : 
+                  risk === 'MEDIUM' ? 'border-orange-200 bg-orange-50/20' : 'border-slate-200 hover:border-blue-500'
+              }`}
+            >
+              <div className="flex items-center space-x-3 overflow-hidden">
+                <div className="relative flex-shrink-0">
+                    <div className={`w-12 h-12 rounded-full flex items-center justify-center transition-colors ${
+                        risk === 'HIGH' ? 'bg-red-100 text-red-600' : 
+                        risk === 'MEDIUM' ? 'bg-orange-100 text-orange-600' : 'bg-slate-100 text-slate-500 group-hover:bg-blue-50 group-hover:text-blue-600'
+                    }`}>
+                      <User size={24} />
+                    </div>
+                    {risk === 'HIGH' && (
+                        <div className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5 border-2 border-white" title="High Risk Alert">
+                            <Shield size={10} />
+                        </div>
                     )}
                 </div>
+                <div className="flex-1 min-w-0">
+                  <h3 className={`font-semibold truncate ${risk === 'HIGH' ? 'text-red-800' : 'text-slate-800 group-hover:text-blue-700'}`}>
+                      {student.name}
+                  </h3>
+                  <div className="flex flex-wrap items-center gap-2 mt-1">
+                      <span className="inline-flex items-center text-xs text-slate-500 bg-slate-50 px-2 py-0.5 rounded border border-slate-100">
+                          {student.id.slice(-6)}
+                      </span>
+                      {student.studentClass && (
+                          <span className="inline-flex items-center text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-100">
+                              <GraduationCap size={10} className="mr-1" />
+                              {student.studentClass}
+                          </span>
+                      )}
+                  </div>
+                </div>
               </div>
+              
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onQuickLog(student.name);
+                }}
+                className="p-2 ml-2 text-slate-300 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-colors z-10"
+                title="Quick Log"
+              >
+                <Plus size={20} />
+              </button>
             </div>
-            
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onQuickLog(student.name);
-              }}
-              className="p-2 ml-2 text-slate-300 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-colors z-10"
-              title="Quick Log"
-            >
-              <Plus size={20} />
-            </button>
-          </div>
-        ))}
+          );
+        })}
         
         {filteredStudents.length === 0 && (
              <div className="col-span-full text-center py-16 bg-white rounded-xl border border-slate-100 border-dashed">

@@ -1,23 +1,6 @@
 
-export interface Student {
-  id: string;
-  name: string;
-  email?: string;
-  phone?: string;
-  studentClass?: string;
-  nationality?: string;
-  gender?: string;
-  qId?: string;
-  dob?: string;
-  
-  // Parent/Guardian Details
-  fatherName?: string;
-  fatherPhone?: string;
-  fatherEmail?: string;
-  motherName?: string;
-  motherPhone?: string;
-  motherEmail?: string;
-}
+
+import { Student } from '../types';
 
 // Populated with data extracted from provided documents
 export const STUDENTS: Student[] = [
