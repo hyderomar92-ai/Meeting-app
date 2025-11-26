@@ -143,7 +143,12 @@ const SuperAdminAIMonitor: React.FC<SuperAdminAIMonitorProps> = ({ organizations
                                 <LineChart data={costTrend}>
                                     <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="#f1f5f9" />
                                     <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{fontSize: 12, fill: '#94a3b8'}} />
-                                    <YAxis axisLine={false} tickLine={false} tick={{fontSize: 12, fill: '#94a3b8'}} prefix="$" />
+                                    <YAxis 
+                                        axisLine={false} 
+                                        tickLine={false} 
+                                        tick={{fontSize: 12, fill: '#94a3b8'}} 
+                                        tickFormatter={(value) => `$${value}`} 
+                                    />
                                     <Tooltip />
                                     <Line type="monotone" dataKey="cost" stroke="#10b981" strokeWidth={3} dot={{r: 4}} />
                                 </LineChart>

@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { SafeguardingCase, MeetingLog, UserProfile } from '../types';
 import { generateSafeguardingReport } from '../services/geminiService';
@@ -497,7 +496,11 @@ const SafeguardingBuilder: React.FC<SafeguardingBuilderProps> = ({ cases, logs, 
                       <div>
                           <h2 className="text-xl font-bold text-slate-800 flex items-center">
                             {selectedCase.studentName}
-                            {selectedCase.isConfidential && <Lock size={16} className="ml-2 text-red-500" title="Confidential" />}
+                            {selectedCase.isConfidential && (
+                                <span title="Confidential" className="ml-2 text-red-500 flex items-center">
+                                    <Lock size={16} />
+                                </span>
+                            )}
                           </h2>
                           <p className="text-xs text-slate-500">Case ID: {selectedCase.id.slice(0,8)} • {new Date(selectedCase.date).toLocaleDateString()}</p>
                       </div>

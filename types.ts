@@ -16,6 +16,8 @@ export interface UserProfile {
   initials: string;
   orgId?: string;
   email?: string;
+  lastLogin?: string;
+  status?: 'Active' | 'Locked' | 'Suspended';
 }
 
 export interface Organization {
@@ -155,7 +157,19 @@ export type ViewState =
   | 'SUPER_ADMIN_AI'
   | 'SUPER_ADMIN_SECURITY'
   | 'SUPER_ADMIN_TOOLS'
-  | 'ORG_SETTINGS';
+  | 'SUPER_ADMIN_OPS'
+  | 'SUPER_ADMIN_SUBSCRIPTIONS'
+  | 'SUPER_ADMIN_INTEGRATIONS'
+  | 'SUPER_ADMIN_DATA'
+  | 'SUPER_ADMIN_RESOURCES'
+  | 'SUPER_ADMIN_BRANDING'
+  | 'SUPER_ADMIN_FEEDBACK'
+  | 'ORG_SETTINGS'
+  | 'IT_DASHBOARD'
+  | 'IT_USERS'
+  | 'IT_ASSETS'
+  | 'IT_DATA'
+  | 'IT_HELPDESK';
 
 export interface Student {
   id: string;
@@ -177,18 +191,116 @@ export interface Student {
   motherEmail?: string;
 }
 
-// Admin Tools Types
+// Super Admin Types
+
 export interface LicenseKey {
-  key: string;
-  tier: 'Starter' | 'Pro' | 'Enterprise';
-  durationDays: number;
-  generatedDate: string;
-  status: 'Active' | 'Redeemed' | 'Revoked';
-  redeemedBy?: string; // Org ID
+    key: string;
+    tier: 'Starter' | 'Pro' | 'Enterprise';
+    durationDays: number;
+    generatedDate: string;
+    status: 'Active' | 'Used' | 'Expired';
 }
 
 export interface GlobalAIConfig {
-  safeguardingSensitivity: 'Standard' | 'Strict' | 'Lenient';
-  baseSystemPrompt: string;
-  excludedKeywords: string[];
+    safeguardingSensitivity: 'Standard' | 'Strict' | 'Lenient';
+    baseSystemPrompt: string;
+    excludedKeywords: string[];
+}
+
+export interface SystemAnnouncement {
+    id: string;
+    message: string;
+    type: 'Info' | 'Warning' | 'Critical';
+    active: boolean;
+    expiresAt: string;
+}
+
+export interface Subscription {
+    id: string;
+    orgId: string;
+    orgName: string;
+    plan: 'Starter' | 'Pro' | 'Enterprise';
+    amount: number;
+    billingCycle: 'Monthly' | 'Annual';
+    nextBillingDate: string;
+    status: 'Active' | 'Past Due' | 'Trial' | 'Canceled';
+    paymentMethod: 'Card' | 'Invoice' | 'Bank Transfer';
+}
+
+export interface Integration {
+    id: string;
+    name: string;
+    category: string;
+    status: 'Active' | 'Maintenance' | 'Beta' | 'Disabled';
+    connectedTenants: number;
+    icon: string;
+    description: string;
+}
+
+export interface DataExportJob {
+    id: string;
+    orgName: string;
+    requestDate: string;
+    status: 'Pending' | 'Processing' | 'Completed' | 'Failed';
+    size: string;
+    type: string;
+}
+
+export interface ResourceItem {
+    id: string;
+    title: string;
+    category: 'Guide' | 'Template' | 'Policy' | 'Other';
+    targetTier: 'All' | 'Pro' | 'Enterprise';
+    uploadDate: string;
+    fileType: 'PDF' | 'DOCX' | 'Video' | 'Other';
+    downloadCount: number;
+}
+
+export interface FeedbackItem {
+    id: string;
+    user: string;
+    orgName: string;
+    type: 'Bug' | 'Feature' | 'General';
+    message: string;
+    status: 'New' | 'Reviewing' | 'Planned' | 'Shipped';
+    date: string;
+    priority: 'Low' | 'Medium' | 'High';
+}
+
+export interface AppThemeConfig {
+    appName: string;
+    primaryColor: string;
+    logoUrl: string;
+    loginBackgroundUrl?: string;
+}
+
+// IT Admin Types
+export interface Device {
+  id: string;
+  serialNumber: string;
+  type: 'Laptop' | 'Tablet' | 'Interactive Panel' | 'Desktop';
+  assignedTo?: string; // User Name or Room Number
+  status: 'Active' | 'Repair' | 'Lost' | 'Storage';
+  lastCheckIn: string;
+  model: string;
+}
+
+export interface SupportTicket {
+  id: string;
+  requester: string;
+  role: string;
+  subject: string;
+  priority: 'Low' | 'Medium' | 'High';
+  status: 'Open' | 'In Progress' | 'Resolved';
+  date: string;
+  category: 'Account' | 'Hardware' | 'Network' | 'Software';
+}
+
+export interface SyncLog {
+    id: string;
+    system: 'SIMS' | 'Wonde' | 'Google' | 'Arbor';
+    status: 'Success' | 'Failed' | 'Partial';
+    recordsProcessed: number;
+    timestamp: string;
+    message?: string;
 }

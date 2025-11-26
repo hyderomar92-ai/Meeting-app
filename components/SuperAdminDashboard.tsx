@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Organization } from '../types';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
-import { ShieldCheck, Lock, Terminal, Activity, TrendingUp, AlertTriangle, Users, DollarSign, Server, Radio, Send, Database, Cloud, HardDrive } from 'lucide-react';
+import { ShieldCheck, Lock, Terminal, Activity, TrendingUp, AlertTriangle, Users, DollarSign, Server, Radio, Send, Database, Cloud, HardDrive, AlertOctagon } from 'lucide-react';
 
 interface SuperAdminDashboardProps {
   organizations: Organization[];
@@ -273,6 +273,70 @@ const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ organizations
                     </button>
                 </form>
             </div>
+      </div>
+
+      {/* Live Tenant Monitor Section */}
+      <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
+        <h3 className="text-lg font-bold text-slate-800 mb-6 flex items-center">
+            <Activity size={20} className="mr-2 text-indigo-600" /> Live Tenant Monitor
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {organizations.map(org => {
+                // Mock live data for simulation
+                // Stable seed based on name length for visual consistency during re-renders in this demo
+                const seed = org.name.length;
+                const activeUsers = Math.floor((org.staffCount + org.studentCount) * (0.1 + (seed % 5)/10)); 
+                const alerts = (seed % 3 === 0) ? 1 : 0;
+                const usagePercent = (org.tokenUsageCurrentPeriod / org.tokenLimit) * 100;
+
+                return (
+                    <div key={org.id} className="p-4 border border-slate-200 rounded-lg hover:border-indigo-300 transition-all bg-slate-50/50 hover:shadow-md group cursor-default">
+                        <div className="flex justify-between items-start mb-3">
+                            <div>
+                                <h4 className="font-bold text-slate-700 text-sm truncate max-w-[120px]" title={org.name}>{org.name}</h4>
+                                <span className={`text-[10px] uppercase font-bold px-1.5 py-0.5 rounded border ${
+                                    org.licenseTier === 'Enterprise' ? 'bg-purple-50 text-purple-700 border-purple-100' :
+                                    'bg-slate-100 text-slate-500 border-slate-200'
+                                }`}>{org.licenseTier}</span>
+                            </div>
+                            <div className="flex items-center text-xs font-medium text-emerald-600 bg-white px-2 py-1 rounded-full border border-emerald-100 shadow-sm">
+                                <span className="relative flex h-2 w-2 mr-1.5">
+                                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                                </span>
+                                {activeUsers} Active
+                            </div>
+                        </div>
+                        
+                        <div className="mb-4">
+                            <div className="flex justify-between text-[10px] font-bold text-slate-500 mb-1">
+                                <span className="flex items-center"><Terminal size={10} className="mr-1"/> AI Load</span>
+                                <span>{Math.round(usagePercent)}%</span>
+                            </div>
+                            <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
+                                <div 
+                                    className={`h-1.5 rounded-full transition-all duration-1000 ${usagePercent > 80 ? 'bg-red-500' : usagePercent > 50 ? 'bg-amber-500' : 'bg-indigo-500'}`} 
+                                    style={{width: `${usagePercent}%`}}
+                                ></div>
+                            </div>
+                        </div>
+
+                        <div className="flex items-center justify-between text-xs border-t border-slate-200 pt-3">
+                            {alerts > 0 ? (
+                                <div className="flex items-center text-red-600 font-bold bg-red-50 px-2 py-1 rounded border border-red-100 animate-pulse">
+                                    <AlertOctagon size={12} className="mr-1" /> Security Alert
+                                </div>
+                            ) : (
+                                <div className="flex items-center text-slate-400 font-medium">
+                                    <ShieldCheck size={12} className="mr-1 text-emerald-500" /> Secure
+                                </div>
+                            )}
+                            <span className="text-[10px] text-slate-400 font-mono">ID: {org.id.substring(0,4)}</span>
+                        </div>
+                    </div>
+                )
+            })}
+        </div>
       </div>
     </div>
   );

@@ -17,8 +17,15 @@ import SuperAdminTenants from './components/SuperAdminTenants';
 import SuperAdminAIMonitor from './components/SuperAdminAIMonitor';
 import SuperAdminSecurity from './components/SuperAdminSecurity';
 import SuperAdminTools from './components/SuperAdminTools';
+import SuperAdminOperations from './components/SuperAdminOperations';
+import SuperAdminSubscriptions from './components/SuperAdminSubscriptions';
+import SuperAdminIntegrations from './components/SuperAdminIntegrations';
+import SuperAdminData from './components/SuperAdminData';
+import SuperAdminResources from './components/SuperAdminResources';
+import SuperAdminBranding from './components/SuperAdminBranding';
+import SuperAdminFeedback from './components/SuperAdminFeedback';
 import OrgAdminSettings from './components/OrgAdminSettings';
-import { LayoutDashboard, PlusCircle, Users, Menu, X, Shield, FileText, BookUser, FileBarChart, LogOut, Star, LayoutGrid, Globe, Building2, Settings, BrainCircuit, ShieldAlert, Sliders, Eye } from 'lucide-react';
+import { LayoutDashboard, PlusCircle, Users, Menu, X, Shield, FileText, BookUser, FileBarChart, LogOut, Star, LayoutGrid, Globe, Building2, Settings, BrainCircuit, ShieldAlert, Sliders, Eye, LifeBuoy, CreditCard, Network, Database, Library, Palette, MessageSquare, Activity, Monitor, Ticket, Wifi } from 'lucide-react';
 import { STUDENTS } from './data/students';
 import { useLanguage, Language } from './contexts/LanguageContext';
 
@@ -199,7 +206,15 @@ function App() {
   const [allUsers, setAllUsers] = useState<UserProfile[]>(() => {
        try {
         const saved = localStorage.getItem('sentinel_users');
-        return saved ? JSON.parse(saved) : [];
+        // Ensure fallback mock data if empty for admin tools to work
+        const parsed = saved ? JSON.parse(saved) : [];
+        return parsed.length > 0 ? parsed : [
+            { id: 'u0', name: 'System Owner', role: 'Super Admin', initials: 'SO', email: 'sysadmin@sentinel.ai', status: 'Active' },
+            { id: 'u1', name: 'IT Support', role: 'Admin', initials: 'IT', email: 'it@springfield.edu', status: 'Active' },
+            { id: 'u2', name: 'Jane Doe', role: 'Head of Year', initials: 'JD', email: 'jane.doe@springfield.edu', status: 'Active' },
+            { id: 'u3', name: 'John Smith', role: 'Teacher', initials: 'JS', email: 'j.smith@springfield.edu', status: 'Locked' },
+            { id: 'u4', name: 'Sarah Connor', role: 'DSL', initials: 'SC', email: 's.connor@springfield.edu', status: 'Active' }
+        ];
        } catch {
            return [];
        }
@@ -340,6 +355,8 @@ function App() {
     setRealAdminUser(null); // Clear any previous impersonation
     if (user.role === 'Super Admin') {
         setCurrentView('SUPER_ADMIN_DASHBOARD');
+    } else if (user.role === 'Admin') {
+        setCurrentView('IT_DASHBOARD'); // Default view for IT Admin
     } else {
         setCurrentView('DASHBOARD');
     }
@@ -369,7 +386,7 @@ function App() {
       };
       
       setCurrentUser(tempUser);
-      setCurrentView('DASHBOARD'); // Go to their dashboard
+      setCurrentView('IT_DASHBOARD'); // Go to their dashboard
   };
 
   const stopImpersonation = () => {
@@ -427,20 +444,39 @@ function App() {
           )}
         </div>
 
-        <nav className="px-4 space-y-2 mt-4">
+        <nav className="px-4 space-y-2 mt-4 overflow-y-auto max-h-[calc(100vh-180px)] custom-scrollbar">
           {currentUser.role === 'Super Admin' ? (
-              /* SUPER ADMIN NAVIGATION - EXPANDED */
+              /* SUPER ADMIN NAVIGATION */
               <>
                 <p className="px-4 text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Platform</p>
                 <NavItem view="SUPER_ADMIN_DASHBOARD" icon={Building2} customLabel="Command Center" />
                 <NavItem view="SUPER_ADMIN_TENANTS" icon={Globe} customLabel="Organizations" />
-                <NavItem view="SUPER_ADMIN_TOOLS" icon={Sliders} customLabel="Ops & Tools" />
+                <NavItem view="SUPER_ADMIN_SUBSCRIPTIONS" icon={CreditCard} customLabel="Subscriptions" />
+                <NavItem view="SUPER_ADMIN_INTEGRATIONS" icon={Network} customLabel="Integrations" />
+                <NavItem view="SUPER_ADMIN_OPS" icon={LifeBuoy} customLabel="Support & Ops" />
                 
-                <p className="px-4 text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 mt-4">Intelligence</p>
+                <p className="px-4 text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 mt-4">Data & Content</p>
+                <NavItem view="SUPER_ADMIN_DATA" icon={Database} customLabel="Data Governance" />
+                <NavItem view="SUPER_ADMIN_RESOURCES" icon={Library} customLabel="Resource Library" />
+                
+                <p className="px-4 text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 mt-4">Product & Growth</p>
+                <NavItem view="SUPER_ADMIN_FEEDBACK" icon={MessageSquare} customLabel="Feedback Loop" />
+                <NavItem view="SUPER_ADMIN_BRANDING" icon={Palette} customLabel="Platform Branding" />
+
+                <p className="px-4 text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 mt-4">System</p>
                 <NavItem view="SUPER_ADMIN_AI" icon={BrainCircuit} customLabel="Sentinel Cortex" />
-                
-                <p className="px-4 text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 mt-4">Compliance</p>
                 <NavItem view="SUPER_ADMIN_SECURITY" icon={ShieldAlert} customLabel="Audit & Security" />
+                <NavItem view="SUPER_ADMIN_TOOLS" icon={Sliders} customLabel="Admin Tools" />
+              </>
+          ) : currentUser.role === 'Admin' ? (
+              /* IT ADMIN NAVIGATION */
+              <>
+                <p className="px-4 text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">IT Operations</p>
+                <NavItem view="IT_DASHBOARD" icon={Activity} customLabel="System Overview" />
+                <NavItem view="IT_USERS" icon={Users} customLabel="Identity & Access" />
+                <NavItem view="IT_ASSETS" icon={Monitor} customLabel="Asset Register" />
+                <NavItem view="IT_DATA" icon={Database} customLabel="Data Sync" />
+                <NavItem view="IT_HELPDESK" icon={Ticket} customLabel="Helpdesk" />
               </>
           ) : (
              /* STANDARD SCHOOL NAVIGATION */
@@ -455,10 +491,6 @@ function App() {
                 <div className="pt-4 mt-4 border-t border-slate-800">
                     <p className="px-4 text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">{t("nav.specialized")}</p>
                     <NavItem view="SAFEGUARDING" icon={Shield} labelKey="nav.safeguarding" />
-                    
-                    {currentUser.role === 'Admin' && (
-                        <NavItem view="ORG_SETTINGS" icon={Settings} customLabel="Org Settings" />
-                    )}
                 </div>
              </>
           )}
@@ -552,6 +584,30 @@ function App() {
                 />
             )}
 
+            {currentView === 'SUPER_ADMIN_SUBSCRIPTIONS' && (
+                <SuperAdminSubscriptions />
+            )}
+
+            {currentView === 'SUPER_ADMIN_INTEGRATIONS' && (
+                <SuperAdminIntegrations />
+            )}
+
+            {currentView === 'SUPER_ADMIN_DATA' && (
+                <SuperAdminData organizations={organizations} />
+            )}
+
+            {currentView === 'SUPER_ADMIN_RESOURCES' && (
+                <SuperAdminResources />
+            )}
+
+            {currentView === 'SUPER_ADMIN_BRANDING' && (
+                <SuperAdminBranding />
+            )}
+
+            {currentView === 'SUPER_ADMIN_FEEDBACK' && (
+                <SuperAdminFeedback />
+            )}
+
             {currentView === 'SUPER_ADMIN_AI' && (
                 <SuperAdminAIMonitor organizations={organizations} />
             )}
@@ -564,10 +620,57 @@ function App() {
                 <SuperAdminTools />
             )}
 
+            {currentView === 'SUPER_ADMIN_OPS' && (
+                <SuperAdminOperations allUsers={allUsers} />
+            )}
+
+            {/* IT ADMIN VIEWS - Mapped to OrgAdminSettings with tabs */}
+            {currentView === 'IT_DASHBOARD' && (
+                <OrgAdminSettings 
+                    currentUser={currentUser}
+                    users={allUsers} 
+                    onUpdateUsers={setAllUsers}
+                    initialTab="OVERVIEW"
+                />
+            )}
+            {currentView === 'IT_USERS' && (
+                <OrgAdminSettings 
+                    currentUser={currentUser}
+                    users={allUsers} 
+                    onUpdateUsers={setAllUsers}
+                    initialTab="IAM"
+                />
+            )}
+            {currentView === 'IT_ASSETS' && (
+                <OrgAdminSettings 
+                    currentUser={currentUser}
+                    users={allUsers} 
+                    onUpdateUsers={setAllUsers}
+                    initialTab="ASSETS"
+                />
+            )}
+            {currentView === 'IT_DATA' && (
+                <OrgAdminSettings 
+                    currentUser={currentUser}
+                    users={allUsers} 
+                    onUpdateUsers={setAllUsers}
+                    initialTab="DATA"
+                />
+            )}
+            {currentView === 'IT_HELPDESK' && (
+                <OrgAdminSettings 
+                    currentUser={currentUser}
+                    users={allUsers} 
+                    onUpdateUsers={setAllUsers}
+                    initialTab="HELPDESK"
+                />
+            )}
+
+            {/* Fallback for old routing */}
             {currentView === 'ORG_SETTINGS' && (
                 <OrgAdminSettings 
                     currentUser={currentUser}
-                    users={allUsers} // In real app filter by currentUser.orgId
+                    users={allUsers}
                     onUpdateUsers={setAllUsers}
                 />
             )}
@@ -659,7 +762,7 @@ function App() {
         </div>
         
         {/* Floating Global AI Assistant - Only for School Users */}
-        {currentUser.role !== 'Super Admin' && (
+        {currentUser.role !== 'Super Admin' && currentUser.role !== 'Admin' && (
              <SentinelChat 
                 logs={logs} 
                 safeguarding={safeguardingCases} 
