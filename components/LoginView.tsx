@@ -1,43 +1,23 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { UserProfile } from '../types';
-import { User, Shield, Briefcase, Plus, X, Save, Settings, Trash2, Edit2, Key, Server } from 'lucide-react';
-
-const DEFAULT_USERS: UserProfile[] = [
-  { id: 'u0', name: 'System Owner', role: 'Super Admin', initials: 'SO' },
-  { id: 'u1', name: 'IT Support', role: 'Admin', initials: 'IT' },
-  { id: 'u2', name: 'Jane Doe', role: 'Head of Year', initials: 'JD' },
-  { id: 'u3', name: 'John Smith', role: 'Teacher', initials: 'JS' },
-  { id: 'u4', name: 'Sarah Connor', role: 'DSL', initials: 'SC' },
-];
+import { User, Shield, Briefcase, Plus, X, Save, Settings, Trash2, Edit2, Key } from 'lucide-react';
 
 interface LoginViewProps {
   onLogin: (user: UserProfile) => void;
+  users: UserProfile[];
+  onUpdateUsers: (users: UserProfile[]) => void;
 }
 
 type LoginMode = 'SELECT' | 'MANAGE' | 'ADD' | 'EDIT';
 
-const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
-  const [users, setUsers] = useState<UserProfile[]>(() => {
-    try {
-      const saved = localStorage.getItem('sentinel_users');
-      return saved ? JSON.parse(saved) : DEFAULT_USERS;
-    } catch (e) {
-      return DEFAULT_USERS;
-    }
-  });
-
+const LoginView: React.FC<LoginViewProps> = ({ onLogin, users, onUpdateUsers }) => {
   const [mode, setMode] = useState<LoginMode>('SELECT');
   const [editingId, setEditingId] = useState<string | null>(null);
 
   // Form State
   const [userName, setUserName] = useState('');
   const [userRole, setUserRole] = useState<UserProfile['role']>('Teacher');
-
-  // Persist users to local storage whenever the list changes
-  useEffect(() => {
-    localStorage.setItem('sentinel_users', JSON.stringify(users));
-  }, [users]);
 
   const handleSaveUser = (e: React.FormEvent) => {
     e.preventDefault();
@@ -55,9 +35,10 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
         id: crypto.randomUUID(),
         name: userName,
         role: userRole,
-        initials
+        initials,
+        status: 'Active'
       };
-      setUsers([...users, newUser]);
+      onUpdateUsers([...users, newUser]);
     } else if (mode === 'EDIT' && editingId) {
       const updatedUsers = users.map(u => u.id === editingId ? {
         ...u,
@@ -65,7 +46,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
         role: userRole,
         initials
       } : u);
-      setUsers(updatedUsers);
+      onUpdateUsers(updatedUsers);
     }
 
     resetForm();
@@ -81,7 +62,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
   const handleDelete = (id: string) => {
     if (window.confirm("Are you sure you want to permanently delete this user profile?")) {
       const newUsers = users.filter(u => u.id !== id);
-      setUsers(newUsers);
+      onUpdateUsers(newUsers);
       if (newUsers.length === 0) setMode('ADD'); // Force add if list is empty
     }
   };
@@ -98,7 +79,6 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
           case 'Super Admin': return <Key size={12} className="mr-1 text-amber-500" />;
           case 'DSL': return <Shield size={12} className="mr-1" />;
           case 'Head of Year': return <Briefcase size={12} className="mr-1" />;
-          case 'Admin': return <Server size={12} className="mr-1" />;
           default: return <User size={12} className="mr-1" />;
       }
   };
@@ -166,10 +146,12 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
               {users.map((user) => (
                 <div
                   key={user.id}
-                  onClick={() => mode === 'SELECT' && onLogin(user)}
+                  onClick={() => mode === 'SELECT' && user.status !== 'Locked' && onLogin(user)}
                   className={`w-full flex items-center p-3 rounded-xl border transition-all group relative ${
                       mode === 'SELECT' 
-                        ? 'hover:bg-slate-50 border-transparent hover:border-indigo-200 cursor-pointer' 
+                        ? user.status === 'Locked' 
+                            ? 'bg-slate-50 border-slate-100 opacity-60 cursor-not-allowed'
+                            : 'hover:bg-slate-50 border-transparent hover:border-indigo-200 cursor-pointer' 
                         : 'bg-white border-slate-100'
                   }`}
                 >
@@ -177,13 +159,15 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
                     user.role === 'Super Admin' ? 'bg-slate-800 text-amber-400 ring-2 ring-amber-400/50' :
                     user.role === 'DSL' ? 'bg-red-100 text-red-600 group-hover:bg-red-200' : 
                     user.role === 'Head of Year' ? 'bg-purple-100 text-purple-600 group-hover:bg-purple-200' :
-                    user.role === 'Admin' ? 'bg-emerald-100 text-emerald-700 group-hover:bg-emerald-200' :
                     'bg-indigo-100 text-indigo-600 group-hover:bg-indigo-200'
                   }`}>
                     {user.initials}
                   </div>
                   <div className="text-left flex-1 min-w-0">
-                    <p className="text-slate-800 font-medium group-hover:text-indigo-700 truncate">{user.name}</p>
+                    <p className="text-slate-800 font-medium group-hover:text-indigo-700 truncate flex items-center">
+                        {user.name}
+                        {user.status === 'Locked' && <span className="ml-2 text-[10px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded uppercase font-bold">Locked</span>}
+                    </p>
                     <div className="flex items-center text-xs text-slate-500">
                       {renderRoleIcon(user.role)}
                       {user.role}
@@ -239,7 +223,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
                   <option value="Teacher">Teacher</option>
                   <option value="Head of Year">Head of Year</option>
                   <option value="DSL">DSL (Safeguarding Lead)</option>
-                  <option value="Admin">IT Support / Admin</option>
+                  <option value="Admin">Admin</option>
                   <option value="Super Admin">App Owner</option>
                 </select>
               </div>

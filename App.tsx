@@ -1,6 +1,6 @@
 
-import React, { useState, useEffect } from 'react';
-import { ViewState, MeetingLog, MeetingType, SafeguardingCase, UserProfile, BehaviourEntry, Organization } from './types';
+import React, { useState, useEffect, useMemo } from 'react';
+import { ViewState, MeetingLog, MeetingType, SafeguardingCase, UserProfile, BehaviourEntry, Organization, UserRole } from './types';
 import Dashboard from './components/Dashboard';
 import MeetingForm from './components/MeetingForm';
 import HistoryView from './components/HistoryView';
@@ -25,11 +25,12 @@ import SuperAdminResources from './components/SuperAdminResources';
 import SuperAdminBranding from './components/SuperAdminBranding';
 import SuperAdminFeedback from './components/SuperAdminFeedback';
 import OrgAdminSettings from './components/OrgAdminSettings';
-import { LayoutDashboard, PlusCircle, Users, Menu, X, Shield, FileText, BookUser, FileBarChart, LogOut, Star, LayoutGrid, Globe, Building2, Settings, BrainCircuit, ShieldAlert, Sliders, Eye, LifeBuoy, CreditCard, Network, Database, Library, Palette, MessageSquare, Activity, Monitor, Ticket, Wifi } from 'lucide-react';
+import { LayoutDashboard, PlusCircle, Users, Menu, X, Shield, FileText, BookUser, FileBarChart, LogOut, Star, LayoutGrid, Globe, Building2, Settings, BrainCircuit, ShieldAlert, Sliders, Eye, LifeBuoy, CreditCard, Network, Database, Library, Palette, MessageSquare, Activity, Monitor, Ticket, Wifi, CheckCircle2, AlertCircle } from 'lucide-react';
 import { STUDENTS } from './data/students';
 import { useLanguage, Language } from './contexts/LanguageContext';
 
-// Update mocks to use real student names from the new data file
+// --- MOCK DATA ---
+
 const MOCK_LOGS: MeetingLog[] = [
   {
     id: '1',
@@ -93,244 +94,191 @@ const MOCK_SAFEGUARDING_CASES: SafeguardingCase[] = [
     incidentType: 'Bullying',
     rawDescription: 'Excluding other students from group activities during lunch break.',
     generatedReport: {
-      dslSummary: 'Student involved in repeated exclusion of peers, indicating relational aggression.',
-      chronology: ['12:30 PM - Lunch break started', '12:45 PM - Observed excluding peer', '1:00 PM - Initial discussion with student'],
-      keyEvidence: ['Teacher observation at 12:45 PM'],
-      policiesApplied: ['Anti-Bullying', 'Behavioral Expectations'],
-      witnessQuestions: ['Who else was present?', 'How long has this been happening?'],
-      nextSteps: ['Monitor break times', 'Parent notification'],
-      riskLevel: 'Medium',
+      dslSummary: 'Report of social exclusion behavior during unstructured time. Student observed actively preventing peers from joining games.',
+      chronology: ['20 Oct 12:30 - Incident observed by Lunch Supervisor'],
+      keyEvidence: ['"You cant play with us" heard by staff'],
+      policiesApplied: ['Anti-Bullying Policy', 'Peer Inclusion Framework'],
+      witnessQuestions: ['Did you see who started the exclusion?', 'How long did this last?'],
+      nextSteps: ['Restorative justice meeting', 'Lunchtime monitoring for 1 week'],
+      riskLevel: 'Low',
       sentiment: 'Cautionary'
     },
-    status: 'Investigating',
-    createdBy: 'Jane Doe',
-    completedSteps: [],
-    resolutionNotes: ''
+    status: 'Open',
+    createdBy: 'John Smith'
   },
   {
     id: 'sg-2',
     studentName: 'Hamad Salem A D',
-    date: '2023-10-25',
-    incidentType: 'Online Safety',
-    rawDescription: 'Accessing inappropriate games on school tablet during math lesson.',
+    date: '2023-11-01',
+    incidentType: 'Physical Abuse',
+    rawDescription: 'Allegation of physical altercation behind the sports hall.',
     generatedReport: {
-      dslSummary: 'Violation of ICT Acceptable Use Policy. Student accessed restricted content.',
-      chronology: ['10:15 AM - Math lesson', '10:20 AM - Teacher noticed screen', '10:20 AM - Device confiscated'],
-      keyEvidence: ['Confiscated Device log'],
-      policiesApplied: ['ICT Acceptable Use', 'Online Safety'],
-      witnessQuestions: [],
-      nextSteps: ['ICT privilege suspension', 'Re-sign acceptable use policy'],
-      riskLevel: 'Low',
-      sentiment: 'Routine'
+      dslSummary: 'Serious incident involving physical aggression. Student A pushed Student B causing minor injury.',
+      chronology: ['01 Nov 10:15 - Fight reported by student witness', '01 Nov 10:20 - Staff intervention'],
+      keyEvidence: ['CCTV footage from Sports Hall Exterior', 'Nurse report of grazed knee'],
+      evidenceAnalysis: 'Pattern of escalation during unstructured breaks.',
+      policiesApplied: ['Behavior Policy - Physical Aggression', 'Safeguarding - Peer on Peer Abuse'],
+      witnessQuestions: ['What triggered the push?', 'Were others encouraging it?'],
+      nextSteps: ['Internal exclusion (1 day)', 'Parent meeting required', 'Risk assessment for break times'],
+      riskLevel: 'High',
+      sentiment: 'Critical'
     },
-    status: 'Closed',
-    createdBy: 'Sarah Connor',
-    completedSteps: ['ICT privilege suspension'],
-    resolutionNotes: 'Privileges suspended for 1 week. Parent signed new agreement.'
+    status: 'Investigating',
+    createdBy: 'Jane Doe',
+    isConfidential: true
   }
 ];
 
-const MOCK_ORGANIZATIONS: Organization[] = [
-    { 
-        id: 'org1', name: 'Springfield High', type: 'School', status: 'Active', licenseTier: 'Enterprise', 
-        staffCount: 45, studentCount: 1200, renewalDate: '2024-09-01',
-        tokenUsageCurrentPeriod: 450000, tokenLimit: 1000000, aiCostEstimate: 4.50,
-        features: { safeguarding: true, aiAssistant: true, parentPortal: true },
-        churnRisk: 'Low'
-    },
-    { 
-        id: 'org2', name: 'Westfield College', type: 'College', status: 'Trial', licenseTier: 'Pro', 
-        staffCount: 20, studentCount: 450, renewalDate: '2024-05-15',
-        tokenUsageCurrentPeriod: 12000, tokenLimit: 500000, aiCostEstimate: 0.12,
-        features: { safeguarding: true, aiAssistant: false, parentPortal: false },
-        churnRisk: 'High'
-    },
+const MOCK_BEHAVIOUR_ENTRIES: BehaviourEntry[] = [
+    { id: 'b1', studentName: 'Abdulaziz Jaber A A', date: '2023-11-20T10:00:00', type: 'POSITIVE', category: 'Excellent Work', points: 1, loggedBy: 'John Smith', description: 'Great essay.' },
+    { id: 'b2', studentName: 'Hamad Salem A D', date: '2023-11-20T11:30:00', type: 'NEGATIVE', category: 'Lateness', points: -1, loggedBy: 'Jane Doe', description: '10 mins late.' },
+    { id: 'b3', studentName: 'Adyan Adel', date: '2023-11-21T09:00:00', type: 'POSITIVE', category: 'Helping Others', points: 2, loggedBy: 'Sarah Connor', description: 'Helped new student.' },
+    { id: 'b4', studentName: 'Abdulaziz Jaber A A', date: '2023-11-21T14:00:00', type: 'POSITIVE', category: 'Participation', points: 1, loggedBy: 'John Smith' },
+    { id: 'b5', studentName: 'Hamad Salem A D', date: '2023-11-22T08:45:00', type: 'NEGATIVE', category: 'Uniform Issue', points: -1, loggedBy: 'Head of Year' },
 ];
 
-function App() {
-  const { t, language, setLanguage, dir } = useLanguage();
+const MOCK_ORGANIZATIONS: Organization[] = [
+    { id: 'org-1', name: 'Springfield Academy', type: 'School', status: 'Active', licenseTier: 'Enterprise', studentCount: 1200, staffCount: 85, renewalDate: '2024-09-01', tokenUsageCurrentPeriod: 450000, tokenLimit: 1000000, aiCostEstimate: 22.50, features: { safeguarding: true, aiAssistant: true, parentPortal: true }, churnRisk: 'Low' },
+    { id: 'org-2', name: 'Westfield College', type: 'College', status: 'Active', licenseTier: 'Pro', studentCount: 800, staffCount: 40, renewalDate: '2024-01-15', tokenUsageCurrentPeriod: 12000, tokenLimit: 500000, aiCostEstimate: 0.60, features: { safeguarding: true, aiAssistant: true, parentPortal: false }, churnRisk: 'High' },
+    { id: 'org-3', name: 'Oakridge Primary', type: 'School', status: 'Trial', licenseTier: 'Starter', studentCount: 300, staffCount: 25, renewalDate: '2023-12-20', tokenUsageCurrentPeriod: 5000, tokenLimit: 100000, aiCostEstimate: 0.25, features: { safeguarding: false, aiAssistant: true, parentPortal: false }, churnRisk: 'Medium' },
+];
 
-  // Initialize from LocalStorage if available
-  const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => {
-      try {
-          const saved = localStorage.getItem('sentinel_current_user');
-          return saved ? JSON.parse(saved) : null;
-      } catch {
-          return null;
-      }
-  });
+const INITIAL_USERS: UserProfile[] = [
+    { id: 'u0', name: 'System Owner', role: 'Super Admin', initials: 'SO', status: 'Active' },
+    { id: 'u1', name: 'Jane Doe', role: 'Head of Year', initials: 'JD', email: 'jane@springfield.edu', status: 'Active', orgId: 'org-1' },
+    { id: 'u2', name: 'John Smith', role: 'Teacher', initials: 'JS', email: 'john@springfield.edu', status: 'Active', orgId: 'org-1' },
+    { id: 'u3', name: 'Sarah Connor', role: 'DSL', initials: 'SC', email: 'sarah@springfield.edu', status: 'Active', orgId: 'org-1' },
+    { id: 'u4', name: 'Emily Blunt', role: 'Admin', initials: 'EB', email: 'admin@springfield.edu', status: 'Active', orgId: 'org-1' },
+];
 
-  // SUPER ADMIN IMPERSONATION STATE
-  const [realAdminUser, setRealAdminUser] = useState<UserProfile | null>(null);
-
-  const [currentView, setCurrentView] = useState<ViewState>('DASHBOARD');
+export default function App() {
+  // --- STATE ---
+  const [user, setUser] = useState<UserProfile | null>(null);
+  const [view, setView] = useState<ViewState>('DASHBOARD');
+  const [selectedStudent, setSelectedStudent] = useState<string | undefined>(undefined);
   
+  // Data State with Persistence
   const [logs, setLogs] = useState<MeetingLog[]>(() => {
-    try {
-      const savedLogs = localStorage.getItem('sentinel_logs');
-      return savedLogs ? JSON.parse(savedLogs) : MOCK_LOGS; 
-    } catch (error) {
-      console.error('Failed to load logs from storage:', error);
-      return MOCK_LOGS;
-    }
+      const saved = localStorage.getItem('sentinel_logs');
+      return saved ? JSON.parse(saved) : MOCK_LOGS;
   });
-
   const [safeguardingCases, setSafeguardingCases] = useState<SafeguardingCase[]>(() => {
-    try {
-      const savedCases = localStorage.getItem('sentinel_safeguarding');
-      return savedCases ? JSON.parse(savedCases) : MOCK_SAFEGUARDING_CASES;
-    } catch (error) {
-      return MOCK_SAFEGUARDING_CASES;
-    }
+      const saved = localStorage.getItem('sentinel_safeguarding');
+      return saved ? JSON.parse(saved) : MOCK_SAFEGUARDING_CASES;
   });
-
   const [behaviourEntries, setBehaviourEntries] = useState<BehaviourEntry[]>(() => {
-    try {
       const saved = localStorage.getItem('sentinel_behaviour');
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
+      return saved ? JSON.parse(saved) : MOCK_BEHAVIOUR_ENTRIES;
   });
-
-  // Admin Data States
   const [organizations, setOrganizations] = useState<Organization[]>(() => {
-      try {
-          const saved = localStorage.getItem('sentinel_organizations');
-          return saved ? JSON.parse(saved) : MOCK_ORGANIZATIONS;
-      } catch {
-          return MOCK_ORGANIZATIONS;
-      }
+      const saved = localStorage.getItem('sentinel_organizations');
+      return saved ? JSON.parse(saved) : MOCK_ORGANIZATIONS;
   });
-  
   const [allUsers, setAllUsers] = useState<UserProfile[]>(() => {
-       try {
-        const saved = localStorage.getItem('sentinel_users');
-        // Ensure fallback mock data if empty for admin tools to work
-        const parsed = saved ? JSON.parse(saved) : [];
-        return parsed.length > 0 ? parsed : [
-            { id: 'u0', name: 'System Owner', role: 'Super Admin', initials: 'SO', email: 'sysadmin@sentinel.ai', status: 'Active' },
-            { id: 'u1', name: 'IT Support', role: 'Admin', initials: 'IT', email: 'it@springfield.edu', status: 'Active' },
-            { id: 'u2', name: 'Jane Doe', role: 'Head of Year', initials: 'JD', email: 'jane.doe@springfield.edu', status: 'Active' },
-            { id: 'u3', name: 'John Smith', role: 'Teacher', initials: 'JS', email: 'j.smith@springfield.edu', status: 'Locked' },
-            { id: 'u4', name: 'Sarah Connor', role: 'DSL', initials: 'SC', email: 's.connor@springfield.edu', status: 'Active' }
-        ];
-       } catch {
-           return [];
-       }
+      const saved = localStorage.getItem('sentinel_users');
+      return saved ? JSON.parse(saved) : INITIAL_USERS;
   });
-  
-  const [selectedStudent, setSelectedStudent] = useState<string | null>(null);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
-  
-  // Escalation State
-  const [escalationData, setEscalationData] = useState<{ studentName: string; description: string; date: string } | null>(null);
 
-  // Persist Current User
-  useEffect(() => {
-      if (currentUser) {
-          localStorage.setItem('sentinel_current_user', JSON.stringify(currentUser));
-      } else {
-          localStorage.removeItem('sentinel_current_user');
-      }
-  }, [currentUser]);
-
-  // Persistence Hooks
+  // Persistence Effects
   useEffect(() => { localStorage.setItem('sentinel_logs', JSON.stringify(logs)); }, [logs]);
   useEffect(() => { localStorage.setItem('sentinel_safeguarding', JSON.stringify(safeguardingCases)); }, [safeguardingCases]);
   useEffect(() => { localStorage.setItem('sentinel_behaviour', JSON.stringify(behaviourEntries)); }, [behaviourEntries]);
   useEffect(() => { localStorage.setItem('sentinel_organizations', JSON.stringify(organizations)); }, [organizations]);
   useEffect(() => { localStorage.setItem('sentinel_users', JSON.stringify(allUsers)); }, [allUsers]);
 
+  // Transient state for escalation from Log -> Safeguarding
+  const [escalationData, setEscalationData] = useState<{studentName: string, description: string, date: string} | null>(null);
+
+  // Notification State
+  const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  // UI State
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const { setLanguage, t } = useLanguage();
+
+  // Dynamic Alert Logic
+  const hasCriticalRisks = useMemo(() => {
+      return safeguardingCases.some(c => 
+          (c.status === 'Open' || c.status === 'Investigating') &&
+          (c.generatedReport.riskLevel === 'High' || c.generatedReport.riskLevel === 'Critical')
+      );
+  }, [safeguardingCases]);
+
+  // Auto-dismiss notification
   useEffect(() => {
-    const handleResize = () => {
-       const mobile = window.innerWidth < 768;
-       setIsMobile(mobile);
-       if (!mobile) setIsSidebarOpen(true);
-       else setIsSidebarOpen(false);
-    };
-    window.addEventListener('resize', handleResize);
-    handleResize(); // Init
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
+    if (notification) {
+      const timer = setTimeout(() => {
+        setNotification(null);
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [notification]);
 
-  const handleAddLog = (log: MeetingLog) => {
-    setLogs([log, ...logs]);
-    setCurrentView('DASHBOARD');
-  };
-  
-  const handleEscalateLog = (data: { studentName: string; description: string; date: string }) => {
-      setEscalationData(data);
-      setCurrentView('SAFEGUARDING');
+  // --- HANDLERS ---
+
+  const handleLogin = (loggedInUser: UserProfile) => {
+    setUser(loggedInUser);
+    if (loggedInUser.role === 'Super Admin') {
+        setView('SUPER_ADMIN_DASHBOARD');
+    } else {
+        setView('DASHBOARD');
+    }
   };
 
-  const handleAddSafeguardingCase = (newCase: SafeguardingCase) => {
+  const handleLogout = () => {
+    setUser(null);
+    setView('DASHBOARD');
+    setSelectedStudent(undefined);
+    setEscalationData(null);
+  };
+
+  const handleNavigate = (newView: ViewState, studentName?: string) => {
+    setView(newView);
+    if (studentName) {
+        setSelectedStudent(studentName);
+    }
+    // If navigating away from Safeguarding, clear any pending escalation data so it doesn't reappear
+    if (newView !== 'SAFEGUARDING') {
+       setEscalationData(null);
+    }
+    setIsMobileMenuOpen(false);
+  };
+
+  const handleSaveLog = (newLog: MeetingLog) => {
+    setLogs([newLog, ...logs]);
+    setNotification({ message: 'Meeting logged successfully', type: 'success' });
+    handleNavigate('DASHBOARD');
+  };
+
+  const handleSaveCase = (newCase: SafeguardingCase) => {
     setSafeguardingCases([newCase, ...safeguardingCases]);
-    const logEntry: MeetingLog = {
-      id: crypto.randomUUID(),
-      date: newCase.date,
-      time: new Date().toTimeString().slice(0, 5),
-      attendees: [newCase.studentName],
-      type: MeetingType.BEHAVIORAL,
-      notes: `[SAFEGUARDING CASE FILED] ${newCase.generatedReport.dslSummary}`,
-      actionItems: newCase.generatedReport.nextSteps.map(step => ({
-        id: crypto.randomUUID(),
-        task: step,
-        status: 'Pending'
-      })),
-      sentiment: 'Concerned',
-      createdBy: newCase.createdBy
-    };
-    setLogs([logEntry, ...logs]);
-    setEscalationData(null); // Clear escalation state
-    setCurrentView('SAFEGUARDING');
+    setEscalationData(null); // Clear after save
+    setNotification({ message: 'Safeguarding case created', type: 'success' });
+    handleNavigate('SAFEGUARDING');
   };
 
-  const handleUpdateSafeguardingCase = (updatedCase: SafeguardingCase) => {
+  const handleUpdateCase = (updatedCase: SafeguardingCase) => {
     setSafeguardingCases(prev => prev.map(c => c.id === updatedCase.id ? updatedCase : c));
+    setNotification({ message: 'Case file updated', type: 'success' });
   };
 
-  const handleDeleteSafeguardingCase = (id: string) => {
+  const handleDeleteCase = (id: string) => {
     setSafeguardingCases(prev => prev.filter(c => c.id !== id));
+    setNotification({ message: 'Case file deleted', type: 'success' });
   };
 
-  const handleAddBehaviourEntry = (newEntries: BehaviourEntry[]) => {
-    setBehaviourEntries(prev => [...newEntries, ...prev]);
+  const handleAddBehaviour = (newEntries: BehaviourEntry[]) => {
+    setBehaviourEntries([...newEntries, ...behaviourEntries]);
+    setNotification({ message: `${newEntries.length} behaviour entries added`, type: 'success' });
   };
 
-  const handleNavigate = (view: ViewState, studentName?: string) => {
-    if (view === 'STUDENT_PROFILE' && studentName) {
-      setSelectedStudent(studentName);
-    } else if (view === 'NEW_LOG' && studentName) {
-       setSelectedStudent(studentName);
-    } else if (view === 'SAFEGUARDING' && studentName) {
-       // Allow passing student name to safeguarding view to filter list
-       setSelectedStudent(studentName);
-       setEscalationData(null);
-    } else if (view !== 'STUDENT_PROFILE' && view !== 'NEW_LOG' && view !== 'SAFEGUARDING') {
-       setSelectedStudent(null);
-       setEscalationData(null);
-    }
-    
-    // Clear escalation data if navigating away from safeguarding unless specifically escalating
-    if (view !== 'SAFEGUARDING') {
-        setEscalationData(null);
-    }
-
-    setCurrentView(view);
-    if (isMobile) setIsSidebarOpen(false);
-  };
-
-  const handleToggleActionItem = (logId: string, actionItemId: string) => {
-    setLogs(prevLogs => prevLogs.map(log => {
+  const handleToggleActionItem = (logId: string, actionId: string) => {
+    setLogs(logs.map(log => {
       if (log.id === logId) {
         return {
           ...log,
           actionItems: log.actionItems.map(item => 
-            item.id === actionItemId 
-              ? { ...item, status: item.status === 'Pending' ? 'Completed' : 'Pending' } 
-              : item
+            item.id === actionId ? { ...item, status: item.status === 'Pending' ? 'Completed' : 'Pending' } : item
           )
         };
       }
@@ -339,439 +287,301 @@ function App() {
   };
 
   const handleMarkAllActionsCompleted = (studentName: string) => {
-    setLogs(prevLogs => prevLogs.map(log => {
-      if (log.attendees.includes(studentName)) {
-        return {
-          ...log,
-          actionItems: log.actionItems.map(item => ({ ...item, status: 'Completed' }))
-        };
-      }
-      return log;
-    }));
+      setLogs(logs.map(log => {
+          if (log.attendees.includes(studentName) && log.actionItems) {
+              return {
+                  ...log,
+                  actionItems: log.actionItems.map(item => ({ ...item, status: 'Completed' }))
+              };
+          }
+          return log;
+      }));
+      setNotification({ message: 'All actions marked completed', type: 'success' });
   };
 
-  const handleLogin = (user: UserProfile) => {
-    setCurrentUser(user);
-    setRealAdminUser(null); // Clear any previous impersonation
-    if (user.role === 'Super Admin') {
-        setCurrentView('SUPER_ADMIN_DASHBOARD');
-    } else if (user.role === 'Admin') {
-        setCurrentView('IT_DASHBOARD'); // Default view for IT Admin
-    } else {
-        setCurrentView('DASHBOARD');
+  const handleImpersonate = (orgId: string) => {
+      const org = organizations.find(o => o.id === orgId);
+      if (org) {
+          // Find valid admin user or create temp
+          let targetUser = allUsers.find(u => u.orgId === orgId && ['Admin', 'Head of Year', 'DSL'].includes(u.role));
+          
+          if (!targetUser) {
+             targetUser = {
+                 id: `temp-${orgId}`,
+                 name: `${org.name} Admin`,
+                 role: 'Admin',
+                 initials: 'AD',
+                 orgId: org.id,
+                 status: 'Active'
+             };
+             // Update allUsers so this admin persists for the session
+             setAllUsers([...allUsers, targetUser]);
+          }
+
+          setNotification({ message: `Accessing ${org.name} as Administrator...`, type: 'success' });
+          
+          // Switch user context to simulate login
+          setUser(targetUser);
+          setView('DASHBOARD');
+      }
+  };
+
+  // --- VIEW RENDERER ---
+
+  const renderContent = () => {
+    if (!user) return null;
+
+    switch (view) {
+      case 'DASHBOARD':
+        return <Dashboard logs={logs} safeguardingCases={safeguardingCases} behaviourEntries={behaviourEntries} onNavigate={handleNavigate} currentUser={user} />;
+      case 'NEW_LOG':
+        return (
+            <MeetingForm 
+                onSubmit={handleSaveLog} 
+                onCancel={() => handleNavigate('DASHBOARD')} 
+                initialAttendees={selectedStudent ? [selectedStudent] : []} 
+                currentUser={user} 
+                onEscalate={(data) => { 
+                    setEscalationData(data);
+                    setView('SAFEGUARDING');
+                }} 
+            />
+        );
+      case 'HISTORY':
+        return <HistoryView logs={logs} onSelectStudent={(name) => handleNavigate('STUDENT_PROFILE', name)} />;
+      case 'STUDENT_PROFILE':
+        return selectedStudent ? (
+          <StudentProfile 
+            studentName={selectedStudent} 
+            logs={logs} 
+            behaviourEntries={behaviourEntries}
+            safeguardingCases={safeguardingCases}
+            onBack={() => handleNavigate('STUDENTS_DIRECTORY')} 
+            onToggleActionItem={handleToggleActionItem}
+            onMarkAllCompleted={handleMarkAllActionsCompleted}
+            onQuickLog={(name) => handleNavigate('NEW_LOG', name)}
+            onViewSafeguarding={(name) => handleNavigate('SAFEGUARDING', name)}
+          />
+        ) : <StudentDirectory onSelectStudent={(name) => handleNavigate('STUDENT_PROFILE', name)} onQuickLog={(name) => handleNavigate('NEW_LOG', name)} safeguardingCases={safeguardingCases} />;
+      case 'STUDENTS_DIRECTORY':
+        return <StudentDirectory onSelectStudent={(name) => handleNavigate('STUDENT_PROFILE', name)} onQuickLog={(name) => handleNavigate('NEW_LOG', name)} safeguardingCases={safeguardingCases} />;
+      case 'SAFEGUARDING':
+        return (
+            <SafeguardingBuilder 
+                cases={safeguardingCases} 
+                logs={logs} 
+                onSave={handleSaveCase} 
+                onUpdate={handleUpdateCase} 
+                onDelete={handleDeleteCase} 
+                onCancel={() => {
+                    setEscalationData(null);
+                    handleNavigate('DASHBOARD');
+                }} 
+                currentUser={user} 
+                initialSearchTerm={selectedStudent}
+                initialData={escalationData}
+            />
+        );
+      case 'REPORTS':
+        return <ReportsView logs={logs} safeguardingCases={safeguardingCases} />;
+      case 'BEHAVIOUR':
+        return <BehaviourManager currentUser={user} entries={behaviourEntries} onAddEntries={handleAddBehaviour} />;
+      case 'SEATING_PLAN':
+        return <SeatingPlanView behaviourEntries={behaviourEntries} safeguardingCases={safeguardingCases} />;
+      case 'ORG_SETTINGS':
+        return <OrgAdminSettings currentUser={user} users={allUsers} onUpdateUsers={setAllUsers} />;
+      
+      // Super Admin Views
+      case 'SUPER_ADMIN_DASHBOARD': return <SuperAdminDashboard organizations={organizations} />;
+      case 'SUPER_ADMIN_TENANTS': 
+        return <SuperAdminTenants 
+            organizations={organizations} 
+            onAddOrg={(o) => setOrganizations([...organizations, o])} 
+            onUpdateOrg={(o) => setOrganizations(organizations.map(org => org.id === o.id ? o : org))} 
+            onImpersonate={handleImpersonate} 
+        />;
+      case 'SUPER_ADMIN_AI': return <SuperAdminAIMonitor organizations={organizations} />;
+      case 'SUPER_ADMIN_SECURITY': return <SuperAdminSecurity />;
+      case 'SUPER_ADMIN_TOOLS': return <SuperAdminTools />;
+      case 'SUPER_ADMIN_OPS': return <SuperAdminOperations allUsers={allUsers} onUpdateUsers={setAllUsers} />;
+      case 'SUPER_ADMIN_SUBSCRIPTIONS': return <SuperAdminSubscriptions />;
+      case 'SUPER_ADMIN_INTEGRATIONS': return <SuperAdminIntegrations />;
+      case 'SUPER_ADMIN_DATA': return <SuperAdminData organizations={organizations} />;
+      case 'SUPER_ADMIN_RESOURCES': return <SuperAdminResources />;
+      case 'SUPER_ADMIN_BRANDING': return <SuperAdminBranding />;
+      case 'SUPER_ADMIN_FEEDBACK': return <SuperAdminFeedback />;
+      
+      // IT Admin View
+      case 'IT_DASHBOARD': return <OrgAdminSettings currentUser={user} users={allUsers} onUpdateUsers={setAllUsers} initialTab="OVERVIEW" />;
+      case 'IT_USERS': return <OrgAdminSettings currentUser={user} users={allUsers} onUpdateUsers={setAllUsers} initialTab="IAM" />;
+      case 'IT_ASSETS': return <OrgAdminSettings currentUser={user} users={allUsers} onUpdateUsers={setAllUsers} initialTab="ASSETS" />;
+      case 'IT_DATA': return <OrgAdminSettings currentUser={user} users={allUsers} onUpdateUsers={setAllUsers} initialTab="DATA" />;
+      case 'IT_HELPDESK': return <OrgAdminSettings currentUser={user} users={allUsers} onUpdateUsers={setAllUsers} initialTab="HELPDESK" />;
+
+      default:
+        return <Dashboard logs={logs} safeguardingCases={safeguardingCases} behaviourEntries={behaviourEntries} onNavigate={handleNavigate} currentUser={user} />;
     }
   };
 
-  const handleLogout = () => {
-    setCurrentUser(null);
-    setRealAdminUser(null);
-    setSelectedStudent(null);
-    setCurrentView('DASHBOARD');
-  };
+  const isSuperAdmin = user?.role === 'Super Admin';
+  const isITAdmin = user?.role === 'Admin';
 
-  // --- IMPERSONATION LOGIC ---
-  const handleImpersonate = (orgId: string) => {
-      const org = organizations.find(o => o.id === orgId);
-      if (!org || !currentUser) return;
-
-      setRealAdminUser(currentUser); // Store the real admin
-      
-      // Create a temporary admin user for that org
-      const tempUser: UserProfile = {
-          id: `temp-${orgId}`,
-          name: `${org.name} Admin (Ghost)`,
-          role: 'Admin',
-          initials: 'GA',
-          orgId: orgId
-      };
-      
-      setCurrentUser(tempUser);
-      setCurrentView('IT_DASHBOARD'); // Go to their dashboard
-  };
-
-  const stopImpersonation = () => {
-      if (realAdminUser) {
-          setCurrentUser(realAdminUser);
-          setRealAdminUser(null);
-          setCurrentView('SUPER_ADMIN_TENANTS');
-      }
-  };
-
-  const NavItem = ({ view, icon: Icon, labelKey, customLabel }: { view: ViewState, icon: any, labelKey?: string, customLabel?: string }) => (
-    <button 
-      onClick={() => handleNavigate(view)}
-      className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors text-left ${
-        currentView === view && !selectedStudent
-          ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/20 font-semibold' 
-          : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-      }`}
-    >
-      <Icon size={20} className={currentView === view ? 'text-white' : 'text-slate-500 group-hover:text-white'} />
-      <span className="font-medium">{customLabel || (labelKey ? t(labelKey) : '')}</span>
-    </button>
-  );
-
-  if (!currentUser) {
-    return <LoginView onLogin={handleLogin} />;
+  if (!user) {
+    return <LoginView onLogin={handleLogin} users={allUsers} onUpdateUsers={setAllUsers} />;
   }
 
   return (
-    <div className="flex h-screen bg-slate-50 overflow-hidden" dir={dir}>
-      {/* Mobile Overlay with Backdrop Blur */}
-      {isMobile && isSidebarOpen && (
-        <div 
-          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-20 transition-opacity duration-300"
-          onClick={() => setIsSidebarOpen(false)}
-          aria-hidden="true"
-        />
-      )}
-
-      {/* Sidebar with Smooth Slide-in */}
-      <aside 
-        className={`fixed md:static inset-y-0 left-0 z-30 w-64 bg-slate-900 border-r border-slate-800 transform transition-transform duration-300 ease-in-out ${
-          isSidebarOpen ? 'translate-x-0 shadow-2xl md:shadow-none' : (dir === 'rtl' ? 'translate-x-full md:translate-x-0' : '-translate-x-full md:translate-x-0')
-        } print:hidden`}
-      >
-        <div className="p-6 flex items-center justify-between">
-          <div className="flex items-center space-x-2 text-white">
-            <Shield size={28} className="text-indigo-500" />
-            <span className="text-xl font-bold tracking-tight">{t("app.name")}</span>
-          </div>
-          {isMobile && (
-             <button onClick={() => setIsSidebarOpen(false)} className="text-slate-400 hover:text-white transition-colors">
-               <X size={24} />
-             </button>
-          )}
-        </div>
-
-        <nav className="px-4 space-y-2 mt-4 overflow-y-auto max-h-[calc(100vh-180px)] custom-scrollbar">
-          {currentUser.role === 'Super Admin' ? (
-              /* SUPER ADMIN NAVIGATION */
-              <>
-                <p className="px-4 text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Platform</p>
-                <NavItem view="SUPER_ADMIN_DASHBOARD" icon={Building2} customLabel="Command Center" />
-                <NavItem view="SUPER_ADMIN_TENANTS" icon={Globe} customLabel="Organizations" />
-                <NavItem view="SUPER_ADMIN_SUBSCRIPTIONS" icon={CreditCard} customLabel="Subscriptions" />
-                <NavItem view="SUPER_ADMIN_INTEGRATIONS" icon={Network} customLabel="Integrations" />
-                <NavItem view="SUPER_ADMIN_OPS" icon={LifeBuoy} customLabel="Support & Ops" />
-                
-                <p className="px-4 text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 mt-4">Data & Content</p>
-                <NavItem view="SUPER_ADMIN_DATA" icon={Database} customLabel="Data Governance" />
-                <NavItem view="SUPER_ADMIN_RESOURCES" icon={Library} customLabel="Resource Library" />
-                
-                <p className="px-4 text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 mt-4">Product & Growth</p>
-                <NavItem view="SUPER_ADMIN_FEEDBACK" icon={MessageSquare} customLabel="Feedback Loop" />
-                <NavItem view="SUPER_ADMIN_BRANDING" icon={Palette} customLabel="Platform Branding" />
-
-                <p className="px-4 text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 mt-4">System</p>
-                <NavItem view="SUPER_ADMIN_AI" icon={BrainCircuit} customLabel="Sentinel Cortex" />
-                <NavItem view="SUPER_ADMIN_SECURITY" icon={ShieldAlert} customLabel="Audit & Security" />
-                <NavItem view="SUPER_ADMIN_TOOLS" icon={Sliders} customLabel="Admin Tools" />
-              </>
-          ) : currentUser.role === 'Admin' ? (
-              /* IT ADMIN NAVIGATION */
-              <>
-                <p className="px-4 text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">IT Operations</p>
-                <NavItem view="IT_DASHBOARD" icon={Activity} customLabel="System Overview" />
-                <NavItem view="IT_USERS" icon={Users} customLabel="Identity & Access" />
-                <NavItem view="IT_ASSETS" icon={Monitor} customLabel="Asset Register" />
-                <NavItem view="IT_DATA" icon={Database} customLabel="Data Sync" />
-                <NavItem view="IT_HELPDESK" icon={Ticket} customLabel="Helpdesk" />
-              </>
-          ) : (
-             /* STANDARD SCHOOL NAVIGATION */
-             <>
-                <NavItem view="DASHBOARD" icon={LayoutDashboard} labelKey="nav.dashboard" />
-                <NavItem view="NEW_LOG" icon={PlusCircle} labelKey="nav.new_entry" />
-                <NavItem view="STUDENTS_DIRECTORY" icon={BookUser} labelKey="nav.students" />
-                <NavItem view="HISTORY" icon={FileText} labelKey="nav.history" />
-                <NavItem view="BEHAVIOUR" icon={Star} labelKey="nav.behaviour" />
-                <NavItem view="SEATING_PLAN" icon={LayoutGrid} labelKey="nav.seating" />
-                <NavItem view="REPORTS" icon={FileBarChart} labelKey="nav.reports" />
-                <div className="pt-4 mt-4 border-t border-slate-800">
-                    <p className="px-4 text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">{t("nav.specialized")}</p>
-                    <NavItem view="SAFEGUARDING" icon={Shield} labelKey="nav.safeguarding" />
-                </div>
-             </>
-          )}
-        </nav>
-
-        <div className="absolute bottom-0 left-0 right-0 bg-slate-900/50">
-           {/* Language Selector */}
-           <div className="px-4 py-2 border-t border-slate-800">
-              <div className="relative">
-                  <Globe className="absolute left-2 top-1/2 transform -translate-y-1/2 text-slate-400" size={14} />
-                  <select 
-                      value={language}
-                      onChange={(e) => setLanguage(e.target.value as Language)}
-                      className="w-full pl-8 pr-2 py-1.5 bg-slate-800 border border-slate-700 rounded text-xs text-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
-                  >
-                      <option value="en">{t('lang.en')}</option>
-                      <option value="ar">{t('lang.ar')}</option>
-                      <option value="fr">{t('lang.fr')}</option>
-                      <option value="es">{t('lang.es')}</option>
-                      <option value="de">{t('lang.de')}</option>
-                  </select>
-              </div>
-           </div>
-
-          <div className="p-4 border-t border-slate-800">
-            <div className="flex items-center space-x-3 mb-3">
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-white shadow-sm ring-2 ring-slate-800 ${
-                currentUser.role === 'DSL' ? 'bg-red-600' : currentUser.role === 'Super Admin' ? 'bg-amber-500' : 'bg-indigo-600'
+    <div className="flex h-screen bg-slate-50 text-slate-900 font-sans relative">
+        {/* Toast Notification */}
+        {notification && (
+            <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 animate-fade-in">
+                <div className={`px-6 py-3 rounded-full shadow-xl flex items-center space-x-2 text-sm font-bold ${
+                    notification.type === 'success' ? 'bg-slate-900 text-white' : 'bg-red-600 text-white'
                 }`}>
-                {currentUser.initials}
-                </div>
-                <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-white truncate">{currentUser.name}</p>
-                <p className="text-xs text-slate-400 truncate">{currentUser.role}</p>
+                    {notification.type === 'success' ? <CheckCircle2 size={18} className="text-emerald-400" /> : <AlertCircle size={18} />}
+                    <span>{notification.message}</span>
                 </div>
             </div>
-            <button 
-                onClick={handleLogout}
-                className="w-full flex items-center justify-center space-x-2 px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-300 text-sm hover:bg-slate-700 hover:text-white transition-colors"
-            >
-                <LogOut size={16} />
-                <span>{t("user.switch")}</span>
-            </button>
-          </div>
-        </div>
-      </aside>
+        )}
 
-      {/* Main Content */}
-      <main className="flex-1 flex flex-col h-screen overflow-hidden relative">
-        {/* IMPERSONATION BANNER */}
-        {realAdminUser && (
-            <div className="bg-amber-500 text-slate-900 px-4 py-2 font-bold flex justify-between items-center shadow-lg z-50">
-                <div className="flex items-center">
-                    <Eye className="mr-2" />
-                    <span>GHOST MODE: You are impersonating {currentUser.name}. Actions will be logged.</span>
+        {/* Sidebar Navigation */}
+        <aside className={`fixed inset-y-0 left-0 z-30 w-64 bg-slate-900 text-slate-300 transform transition-transform duration-300 ease-in-out ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'} md:relative md:translate-x-0 flex flex-col`}>
+            <div className="p-6 flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                    <div className="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center text-white font-bold shadow-lg">
+                        <Shield size={18} />
+                    </div>
+                    <span className="text-xl font-bold text-white tracking-tight">Sentinel</span>
                 </div>
+                <button onClick={() => setIsMobileMenuOpen(false)} className="md:hidden text-slate-400 hover:text-white"><X size={24} /></button>
+            </div>
+
+            <nav className="flex-1 px-3 space-y-1 overflow-y-auto custom-scrollbar">
+                {/* Standard User Navigation */}
+                {!isSuperAdmin && (
+                    <>
+                        <p className="px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider mt-4 mb-2">School Module</p>
+                        <NavItem icon={<LayoutDashboard size={20} />} label={t('nav.dashboard')} active={view === 'DASHBOARD'} onClick={() => handleNavigate('DASHBOARD')} />
+                        <NavItem icon={<PlusCircle size={20} />} label={t('nav.new_entry')} active={view === 'NEW_LOG'} onClick={() => handleNavigate('NEW_LOG')} />
+                        <NavItem icon={<BookUser size={20} />} label={t('nav.students')} active={view === 'STUDENTS_DIRECTORY' || view === 'STUDENT_PROFILE'} onClick={() => handleNavigate('STUDENTS_DIRECTORY')} />
+                        <NavItem icon={<FileBarChart size={20} />} label={t('nav.history')} active={view === 'HISTORY'} onClick={() => handleNavigate('HISTORY')} />
+                        <NavItem icon={<Star size={20} />} label={t('nav.behaviour')} active={view === 'BEHAVIOUR'} onClick={() => handleNavigate('BEHAVIOUR')} />
+                        <NavItem icon={<LayoutGrid size={20} />} label={t('nav.seating')} active={view === 'SEATING_PLAN'} onClick={() => handleNavigate('SEATING_PLAN')} />
+                        <NavItem icon={<FileText size={20} />} label={t('nav.reports')} active={view === 'REPORTS'} onClick={() => handleNavigate('REPORTS')} />
+                        <NavItem icon={<ShieldAlert size={20} />} label={t('nav.safeguarding')} active={view === 'SAFEGUARDING'} onClick={() => handleNavigate('SAFEGUARDING')} alert={hasCriticalRisks} />
+                        
+                        {isITAdmin && (
+                            <>
+                                <p className="px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider mt-6 mb-2">IT Admin</p>
+                                <NavItem icon={<Activity size={20} />} label="Overview" active={view === 'IT_DASHBOARD'} onClick={() => handleNavigate('IT_DASHBOARD')} />
+                                <NavItem icon={<Users size={20} />} label="Users & IAM" active={view === 'IT_USERS'} onClick={() => handleNavigate('IT_USERS')} />
+                                <NavItem icon={<Monitor size={20} />} label="Assets" active={view === 'IT_ASSETS'} onClick={() => handleNavigate('IT_ASSETS')} />
+                                <NavItem icon={<Database size={20} />} label="Data Sync" active={view === 'IT_DATA'} onClick={() => handleNavigate('IT_DATA')} />
+                                <NavItem icon={<Ticket size={20} />} label="Helpdesk" active={view === 'IT_HELPDESK'} onClick={() => handleNavigate('IT_HELPDESK')} />
+                                <NavItem icon={<Settings size={20} />} label="Org Settings" active={view === 'ORG_SETTINGS'} onClick={() => handleNavigate('ORG_SETTINGS')} />
+                            </>
+                        )}
+                    </>
+                )}
+
+                {/* Super Admin Navigation */}
+                {isSuperAdmin && (
+                    <>
+                        <p className="px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider mt-2 mb-2">Global Command</p>
+                        <NavItem icon={<Globe size={20} />} label="Global Overview" active={view === 'SUPER_ADMIN_DASHBOARD'} onClick={() => handleNavigate('SUPER_ADMIN_DASHBOARD')} />
+                        <NavItem icon={<Building2 size={20} />} label="Tenant Manager" active={view === 'SUPER_ADMIN_TENANTS'} onClick={() => handleNavigate('SUPER_ADMIN_TENANTS')} />
+                        <NavItem icon={<CreditCard size={20} />} label="Subscriptions" active={view === 'SUPER_ADMIN_SUBSCRIPTIONS'} onClick={() => handleNavigate('SUPER_ADMIN_SUBSCRIPTIONS')} />
+                        <NavItem icon={<Network size={20} />} label="Integrations" active={view === 'SUPER_ADMIN_INTEGRATIONS'} onClick={() => handleNavigate('SUPER_ADMIN_INTEGRATIONS')} />
+                        
+                        <p className="px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider mt-6 mb-2">Intelligence & Ops</p>
+                        <NavItem icon={<BrainCircuit size={20} />} label="AI Monitor" active={view === 'SUPER_ADMIN_AI'} onClick={() => handleNavigate('SUPER_ADMIN_AI')} />
+                        <NavItem icon={<ShieldAlert size={20} />} label="Security Audit" active={view === 'SUPER_ADMIN_SECURITY'} onClick={() => handleNavigate('SUPER_ADMIN_SECURITY')} />
+                        <NavItem icon={<Database size={20} />} label="Data Governance" active={view === 'SUPER_ADMIN_DATA'} onClick={() => handleNavigate('SUPER_ADMIN_DATA')} />
+                        <NavItem icon={<Sliders size={20} />} label="Ops & Support" active={view === 'SUPER_ADMIN_OPS'} onClick={() => handleNavigate('SUPER_ADMIN_OPS')} />
+                        <NavItem icon={<Settings size={20} />} label="Platform Tools" active={view === 'SUPER_ADMIN_TOOLS'} onClick={() => handleNavigate('SUPER_ADMIN_TOOLS')} />
+
+                        <p className="px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider mt-6 mb-2">Product</p>
+                        <NavItem icon={<Library size={20} />} label="Resources" active={view === 'SUPER_ADMIN_RESOURCES'} onClick={() => handleNavigate('SUPER_ADMIN_RESOURCES')} />
+                        <NavItem icon={<Palette size={20} />} label="Branding" active={view === 'SUPER_ADMIN_BRANDING'} onClick={() => handleNavigate('SUPER_ADMIN_BRANDING')} />
+                        <NavItem icon={<MessageSquare size={20} />} label="Feedback" active={view === 'SUPER_ADMIN_FEEDBACK'} onClick={() => handleNavigate('SUPER_ADMIN_FEEDBACK')} />
+                    </>
+                )}
+            </nav>
+
+            {/* Sidebar Footer */}
+            <div className="p-4 border-t border-slate-800">
+                <div className="flex items-center mb-4">
+                    <div className="w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center text-sm font-bold text-white mr-3">
+                        {user.initials}
+                    </div>
+                    <div className="overflow-hidden">
+                        <p className="text-sm font-medium text-white truncate">{user.name}</p>
+                        <p className="text-xs text-slate-500 truncate">{user.role}</p>
+                    </div>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-2 mb-3">
+                    <button onClick={() => setLanguage('en')} className="text-xs text-slate-400 hover:text-white border border-slate-700 rounded py-1">EN</button>
+                    <button onClick={() => setLanguage('ar')} className="text-xs text-slate-400 hover:text-white border border-slate-700 rounded py-1">AR</button>
+                </div>
+
                 <button 
-                    onClick={stopImpersonation}
-                    className="px-4 py-1 bg-slate-900 text-white rounded hover:bg-slate-800 text-sm"
+                    onClick={handleLogout}
+                    className="w-full flex items-center justify-center px-4 py-2 text-sm font-medium text-red-400 bg-slate-800 hover:bg-red-900/30 hover:text-red-300 rounded-lg transition-colors"
                 >
-                    Return to Command
+                    <LogOut size={16} className="mr-2" /> Sign Out
                 </button>
             </div>
-        )}
+        </aside>
 
-        {/* Mobile Header */}
-        <header className="bg-slate-900 border-b border-slate-800 p-4 flex md:hidden justify-between items-center print:hidden">
-           <div className="flex items-center space-x-2 text-white">
-            <Shield size={24} className="text-indigo-500" />
-            <span className="text-lg font-bold">Sentinel</span>
-          </div>
-          <button onClick={() => setIsSidebarOpen(true)} className="text-slate-400 hover:text-white transition-colors">
-            <Menu size={24} />
-          </button>
-        </header>
+        {/* Main Content */}
+        <main className="flex-1 flex flex-col h-screen overflow-hidden">
+            {/* Mobile Header */}
+            <header className="md:hidden flex items-center justify-between p-4 bg-white border-b border-slate-200 z-20">
+                <div className="flex items-center space-x-2">
+                    <Shield size={24} className="text-indigo-600" />
+                    <span className="font-bold text-slate-800">Sentinel</span>
+                </div>
+                <button onClick={() => setIsMobileMenuOpen(true)} className="text-slate-600 hover:text-slate-900">
+                    <Menu size={24} />
+                </button>
+            </header>
 
-        <div className="flex-1 overflow-y-auto p-4 md:p-8 print:p-0 print:overflow-visible bg-slate-50">
-          <div className="max-w-7xl mx-auto print:max-w-none h-full">
-            {currentView === 'SUPER_ADMIN_DASHBOARD' && (
-                <SuperAdminDashboard 
-                    organizations={organizations}
-                />
-            )}
+            {/* Content Area */}
+            <div className="flex-1 overflow-auto p-4 md:p-8 relative">
+                {renderContent()}
+            </div>
+        </main>
 
-            {currentView === 'SUPER_ADMIN_TENANTS' && (
-                <SuperAdminTenants 
-                    organizations={organizations}
-                    onAddOrg={(org) => setOrganizations([...organizations, org])}
-                    onUpdateOrg={(org) => setOrganizations(organizations.map(o => o.id === org.id ? org : o))}
-                    onImpersonate={handleImpersonate}
-                />
-            )}
-
-            {currentView === 'SUPER_ADMIN_SUBSCRIPTIONS' && (
-                <SuperAdminSubscriptions />
-            )}
-
-            {currentView === 'SUPER_ADMIN_INTEGRATIONS' && (
-                <SuperAdminIntegrations />
-            )}
-
-            {currentView === 'SUPER_ADMIN_DATA' && (
-                <SuperAdminData organizations={organizations} />
-            )}
-
-            {currentView === 'SUPER_ADMIN_RESOURCES' && (
-                <SuperAdminResources />
-            )}
-
-            {currentView === 'SUPER_ADMIN_BRANDING' && (
-                <SuperAdminBranding />
-            )}
-
-            {currentView === 'SUPER_ADMIN_FEEDBACK' && (
-                <SuperAdminFeedback />
-            )}
-
-            {currentView === 'SUPER_ADMIN_AI' && (
-                <SuperAdminAIMonitor organizations={organizations} />
-            )}
-
-            {currentView === 'SUPER_ADMIN_SECURITY' && (
-                <SuperAdminSecurity />
-            )}
-
-            {currentView === 'SUPER_ADMIN_TOOLS' && (
-                <SuperAdminTools />
-            )}
-
-            {currentView === 'SUPER_ADMIN_OPS' && (
-                <SuperAdminOperations allUsers={allUsers} />
-            )}
-
-            {/* IT ADMIN VIEWS - Mapped to OrgAdminSettings with tabs */}
-            {currentView === 'IT_DASHBOARD' && (
-                <OrgAdminSettings 
-                    currentUser={currentUser}
-                    users={allUsers} 
-                    onUpdateUsers={setAllUsers}
-                    initialTab="OVERVIEW"
-                />
-            )}
-            {currentView === 'IT_USERS' && (
-                <OrgAdminSettings 
-                    currentUser={currentUser}
-                    users={allUsers} 
-                    onUpdateUsers={setAllUsers}
-                    initialTab="IAM"
-                />
-            )}
-            {currentView === 'IT_ASSETS' && (
-                <OrgAdminSettings 
-                    currentUser={currentUser}
-                    users={allUsers} 
-                    onUpdateUsers={setAllUsers}
-                    initialTab="ASSETS"
-                />
-            )}
-            {currentView === 'IT_DATA' && (
-                <OrgAdminSettings 
-                    currentUser={currentUser}
-                    users={allUsers} 
-                    onUpdateUsers={setAllUsers}
-                    initialTab="DATA"
-                />
-            )}
-            {currentView === 'IT_HELPDESK' && (
-                <OrgAdminSettings 
-                    currentUser={currentUser}
-                    users={allUsers} 
-                    onUpdateUsers={setAllUsers}
-                    initialTab="HELPDESK"
-                />
-            )}
-
-            {/* Fallback for old routing */}
-            {currentView === 'ORG_SETTINGS' && (
-                <OrgAdminSettings 
-                    currentUser={currentUser}
-                    users={allUsers}
-                    onUpdateUsers={setAllUsers}
-                />
-            )}
-
-            {currentView === 'DASHBOARD' && (
-              <Dashboard 
-                logs={logs} 
-                safeguardingCases={safeguardingCases}
-                behaviourEntries={behaviourEntries}
-                onNavigate={handleNavigate} 
-                currentUser={currentUser} 
-              />
-            )}
-            
-            {currentView === 'NEW_LOG' && (
-              <MeetingForm 
-                initialAttendees={currentView === 'NEW_LOG' && selectedStudent ? [selectedStudent] : []}
-                onSubmit={handleAddLog} 
-                onCancel={() => handleNavigate('DASHBOARD')}
-                currentUser={currentUser}
-                onEscalate={handleEscalateLog}
-              />
-            )}
-
-            {currentView === 'STUDENTS_DIRECTORY' && (
-              <StudentDirectory 
-                onSelectStudent={(name) => handleNavigate('STUDENT_PROFILE', name)}
-                onQuickLog={(name) => handleNavigate('NEW_LOG', name)}
-              />
-            )}
-
-            {currentView === 'HISTORY' && (
-              <HistoryView 
-                logs={logs} 
-                onSelectStudent={(name) => handleNavigate('STUDENT_PROFILE', name)} 
-              />
-            )}
-
-            {currentView === 'BEHAVIOUR' && (
-              <BehaviourManager 
-                currentUser={currentUser} 
-                entries={behaviourEntries}
-                onAddEntries={handleAddBehaviourEntry}
-              />
-            )}
-
-            {currentView === 'SEATING_PLAN' && (
-              <SeatingPlanView 
-                behaviourEntries={behaviourEntries}
-                safeguardingCases={safeguardingCases}
-              />
-            )}
-
-            {currentView === 'REPORTS' && (
-              <ReportsView 
-                logs={logs}
-                safeguardingCases={safeguardingCases}
-              />
-            )}
-
-            {currentView === 'STUDENT_PROFILE' && selectedStudent && (
-              <StudentProfile 
-                studentName={selectedStudent} 
-                logs={logs}
-                behaviourEntries={behaviourEntries}
-                safeguardingCases={safeguardingCases}
-                onBack={() => handleNavigate('STUDENTS_DIRECTORY')}
-                onToggleActionItem={handleToggleActionItem}
-                onMarkAllCompleted={handleMarkAllActionsCompleted}
-                onQuickLog={(name) => handleNavigate('NEW_LOG', name)}
-                onViewSafeguarding={(name) => handleNavigate('SAFEGUARDING', name)}
-              />
-            )}
-
-            {currentView === 'SAFEGUARDING' && (
-              <SafeguardingBuilder 
-                cases={safeguardingCases}
-                logs={logs}
-                onSave={handleAddSafeguardingCase}
-                onUpdate={handleUpdateSafeguardingCase}
-                onDelete={handleDeleteSafeguardingCase}
-                onCancel={() => handleNavigate('DASHBOARD')}
-                currentUser={currentUser}
-                initialSearchTerm={selectedStudent || ''}
-                initialData={escalationData}
-              />
-            )}
-          </div>
-        </div>
-        
-        {/* Floating Global AI Assistant - Only for School Users */}
-        {currentUser.role !== 'Super Admin' && currentUser.role !== 'Admin' && (
-             <SentinelChat 
-                logs={logs} 
-                safeguarding={safeguardingCases} 
-                behavior={behaviourEntries} 
-            />
-        )}
-      </main>
+        {/* Global AI Chat Widget (Always present when logged in) */}
+        <SentinelChat logs={logs} safeguarding={safeguardingCases} behavior={behaviourEntries} />
     </div>
   );
 }
 
-export default App;
+interface NavItemProps {
+    icon: React.ReactNode;
+    label: string;
+    active: boolean;
+    onClick: () => void;
+    alert?: boolean;
+}
+
+const NavItem: React.FC<NavItemProps> = ({ icon, label, active, onClick, alert }) => (
+    <button 
+        onClick={onClick}
+        className={`w-full flex items-center px-3 py-2.5 rounded-lg transition-all duration-200 group relative ${
+            active 
+            ? 'bg-indigo-600 text-white shadow-md shadow-indigo-900/20' 
+            : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+        }`}
+    >
+        <span className={`mr-3 transition-colors ${active ? 'text-indigo-200' : 'text-slate-500 group-hover:text-white'}`}>
+            {icon}
+        </span>
+        <span className="text-sm font-medium">{label}</span>
+        {alert && (
+            <span className="absolute right-2 w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
+        )}
+    </button>
+);

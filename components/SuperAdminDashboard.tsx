@@ -35,34 +35,29 @@ const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ organizations
       return () => clearInterval(interval);
   }, []);
 
-  // Growth Data
-  const data = [
-    { name: 'Jan', active: 40, revenue: 2400 },
-    { name: 'Feb', active: 45, revenue: 3200 },
-    { name: 'Mar', active: 55, revenue: 4500 },
-    { name: 'Apr', active: 68, revenue: 5100 },
-    { name: 'May', active: 80, revenue: 6800 },
-    { name: 'Jun', active: 95, revenue: 8400 },
-  ];
-
-  // AI Usage Data
-  const usageData = [
-      { name: 'Mon', tokens: 120000 },
-      { name: 'Tue', tokens: 150000 },
-      { name: 'Wed', tokens: 180000 },
-      { name: 'Thu', tokens: 160000 },
-      { name: 'Fri', tokens: 140000 },
-      { name: 'Sat', tokens: 50000 },
-      { name: 'Sun', tokens: 40000 },
-  ];
-
+  // Dynamic Data based on Props
   const totalUsers = organizations.reduce((acc, org) => acc + org.staffCount + org.studentCount, 0);
   const totalRevenue = organizations.reduce((acc, org) => {
       const base = org.licenseTier === 'Enterprise' ? 5000 : org.licenseTier === 'Pro' ? 2000 : 500;
       return acc + base;
   }, 0);
-
   const atRiskTenants = organizations.filter(o => o.churnRisk === 'High');
+
+  // Growth Data (Mocked visualization but could be calculated if history existed)
+  const data = [
+    { name: 'Jan', active: Math.floor(totalUsers * 0.4), revenue: Math.floor(totalRevenue * 0.4) },
+    { name: 'Feb', active: Math.floor(totalUsers * 0.5), revenue: Math.floor(totalRevenue * 0.5) },
+    { name: 'Mar', active: Math.floor(totalUsers * 0.6), revenue: Math.floor(totalRevenue * 0.6) },
+    { name: 'Apr', active: Math.floor(totalUsers * 0.75), revenue: Math.floor(totalRevenue * 0.75) },
+    { name: 'May', active: Math.floor(totalUsers * 0.9), revenue: Math.floor(totalRevenue * 0.9) },
+    { name: 'Jun', active: totalUsers, revenue: totalRevenue },
+  ];
+
+  // AI Usage Data
+  const usageData = organizations.map(org => ({
+      name: org.name.substring(0, 10),
+      tokens: org.tokenUsageCurrentPeriod
+  }));
 
   const handleBroadcast = (e: React.FormEvent) => {
       e.preventDefault();
@@ -222,7 +217,7 @@ const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ organizations
                         <div key={tenant.id} className="p-4 bg-red-50 border border-red-100 rounded-lg flex items-center justify-between">
                             <div>
                                 <h4 className="text-sm font-bold text-red-800">{tenant.name}</h4>
-                                <p className="text-xs text-red-600 mt-1">Usage dropped 45% last 30 days</p>
+                                <p className="text-xs text-red-600 mt-1">Usage dropped significantly</p>
                             </div>
                             <button className="text-xs bg-white border border-red-200 px-2 py-1 rounded text-red-600 font-medium hover:bg-red-50">Contact</button>
                         </div>

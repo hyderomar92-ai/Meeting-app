@@ -9,6 +9,55 @@ import { STUDENTS } from "../data/students";
 const apiKey = process.env.API_KEY || '';
 const ai = new GoogleGenAI({ apiKey });
 
+// Centralized Error Handling Helper
+const handleAIError = (error: any, actionDescription: string): never => {
+  console.error(`AI Error [${actionDescription}]:`, error);
+
+  const msg = (error.message || '').toLowerCase();
+
+  // Network / Connectivity
+  if (msg.includes('fetch failed') || msg.includes('network') || msg.includes('connection')) {
+      throw new Error("Network Error: Unable to connect to AI service. Please check your internet connection.");
+  }
+
+  // Authentication & Permissions
+  if (msg.includes('401') || msg.includes('api key') || msg.includes('unauthorized')) {
+      throw new Error("Authentication Error: Invalid API Key. Please check your configuration.");
+  }
+  if (msg.includes('403') || msg.includes('permission') || msg.includes('location')) {
+      throw new Error("Access Denied: AI service not available in your region or account restriction.");
+  }
+
+  // Resource & Limits
+  if (msg.includes('429') || msg.includes('quota') || msg.includes('exhausted') || msg.includes('too many requests')) {
+      throw new Error("Rate Limit Exceeded: The system is busy. Please wait a moment and try again.");
+  }
+  if (msg.includes('503') || msg.includes('overloaded')) {
+      throw new Error("Service Overloaded: Google AI is currently experiencing high traffic. Please retry shortly.");
+  }
+
+  // Model & Request Issues
+  if (msg.includes('400') || msg.includes('invalid argument')) {
+      throw new Error("Request Error: The provided input data was invalid.");
+  }
+  if (msg.includes('404') || msg.includes('not found')) {
+      throw new Error("Configuration Error: The selected AI model is currently unavailable.");
+  }
+  
+  // Safety Filters
+  if (msg.includes('safety') || msg.includes('blocked') || msg.includes('harmful')) {
+      throw new Error("Safety Block: The AI response was blocked by safety filters. Please refine your input.");
+  }
+
+  // Parsing / Internal
+  if (msg.includes('parse') || msg.includes('json') || msg.includes('empty response')) {
+      throw new Error("Processing Error: Received invalid data format from AI. Please try again.");
+  }
+
+  // Default fallback
+  throw new Error(`An unexpected error occurred while ${actionDescription}.`);
+};
+
 // Helper to reliably parse JSON from AI responses which might include Markdown code blocks
 const cleanAndParseJSON = (text: string): any => {
   if (!text) throw new Error("Empty response from AI");
@@ -158,11 +207,10 @@ export const analyzeLogEntry = async (rawNotes: string, language: string = 'en')
         });
 
         const text = response.text;
-        if (!text) throw new Error("No response from AI");
+        if (!text) throw new Error("Empty response from AI");
         return cleanAndParseJSON(text) as LogAnalysisResponse;
     } catch (e) {
-        console.error("Analysis Error:", e);
-        throw new Error("Unable to analyze notes. Please try again.");
+        handleAIError(e, "analyzing log entry");
     }
 };
 
@@ -208,12 +256,11 @@ export const enhanceMeetingNotes = async (rawNotes: string, language: string = '
     });
 
     const text = response.text;
-    if (!text) throw new Error("No response text from AI");
+    if (!text) throw new Error("Empty response from AI");
     
     return cleanAndParseJSON(text) as EnhancedNotesResponse;
   } catch (error) {
-    console.error("Error enhancing notes:", error);
-    throw new Error("Failed to enhance notes.");
+    handleAIError(error, "enhancing notes");
   }
 };
 
@@ -246,8 +293,7 @@ export const generateSmartActions = async (notes: string, language: string = 'en
     if (!text) return [];
     return cleanAndParseJSON(text) as string[];
   } catch (e) {
-    console.error("Action gen error", e);
-    throw new Error("Failed to generate smart actions.");
+    handleAIError(e, "generating actions");
   }
 };
 
@@ -319,12 +365,11 @@ export const generateSafeguardingReport = async (
     });
 
     const text = response.text;
-    if (!text) throw new Error("No response text from AI");
+    if (!text) throw new Error("Empty response from AI");
 
     return cleanAndParseJSON(text) as SafeguardingReportResponse;
   } catch (error) {
-    console.error("Error generating safeguarding report:", error);
-    throw new Error("Failed to generate safeguarding report.");
+    handleAIError(error, "generating safeguarding report");
   }
 };
 
@@ -423,12 +468,11 @@ export const generateComprehensiveReport = async (
     });
 
     const text = response.text;
-    if (!text) throw new Error("No response text from AI");
+    if (!text) throw new Error("Empty response from AI");
     
     return cleanAndParseJSON(text) as GeneratedReportResponse;
   } catch (error) {
-    console.error("Error generating report:", error);
-    throw new Error("Failed to generate comprehensive report.");
+    handleAIError(error, "generating comprehensive report");
   }
 };
 
@@ -495,11 +539,10 @@ export const scanForRisks = async (logs: MeetingLog[], behavior: BehaviourEntry[
         });
 
         const text = response.text;
-        if (!text) throw new Error("No response text from AI");
+        if (!text) throw new Error("Empty response from AI");
         return cleanAndParseJSON(text) as RiskAlert[];
     } catch (e) {
-        console.error("Sentinel Scan Failed", e);
-        throw new Error("Sentinel scan failed to complete.");
+        handleAIError(e, "scanning for risks");
     }
 }
 
@@ -558,8 +601,7 @@ export const querySentinel = async (
 
         return response.text || "I processed the data but couldn't generate a text response.";
     } catch (e) {
-        console.error("Sentinel Chat Error", e);
-        throw new Error("Sentinel is currently offline.");
+        handleAIError(e, "processing chat query");
     }
 };
 
@@ -609,10 +651,9 @@ export const generateCertificateContent = async (
          });
          
          const text = response.text;
-         if(!text) throw new Error("No response");
+         if(!text) throw new Error("Empty response from AI");
          return cleanAndParseJSON(text) as CertificateResponse;
      } catch (e) {
-         console.error("Certificate Generation Error", e);
-         throw new Error("Failed to generate certificate.");
+         handleAIError(e, "generating certificate");
      }
 }

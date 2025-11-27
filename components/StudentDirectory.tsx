@@ -1,14 +1,16 @@
 
 import React, { useState, useMemo } from 'react';
-import { Search, User, GraduationCap, Plus, Filter, CalendarRange, AlertTriangle, Shield } from 'lucide-react';
+import { Search, User, GraduationCap, Plus, Filter, CalendarRange, Shield } from 'lucide-react';
 import { STUDENTS } from '../data/students';
+import { SafeguardingCase } from '../types';
 
 interface StudentDirectoryProps {
   onSelectStudent: (name: string) => void;
   onQuickLog: (name: string) => void;
+  safeguardingCases?: SafeguardingCase[];
 }
 
-const StudentDirectory: React.FC<StudentDirectoryProps> = ({ onSelectStudent, onQuickLog }) => {
+const StudentDirectory: React.FC<StudentDirectoryProps> = ({ onSelectStudent, onQuickLog, safeguardingCases = [] }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedClass, setSelectedClass] = useState('');
   const [selectedYear, setSelectedYear] = useState('');
@@ -36,13 +38,21 @@ const StudentDirectory: React.FC<StudentDirectoryProps> = ({ onSelectStudent, on
     return matchesSearch && matchesClass && matchesYear;
   });
 
-  // Mock function to simulate risk status checking (normally would pass this data in props)
-  const getRiskStatus = (studentId: string) => {
-      // Arbitrary simulation for visual demonstration based on ID
-      const numId = parseInt(studentId.replace(/\D/g, ''));
-      if (numId % 17 === 0) return 'HIGH';
-      if (numId % 11 === 0) return 'MEDIUM';
-      return 'NONE';
+  // Check real safeguarding data for risk status
+  const getRiskStatus = (studentName: string) => {
+      const activeCases = safeguardingCases.filter(c => 
+          c.studentName === studentName && 
+          (c.status === 'Open' || c.status === 'Investigating')
+      );
+
+      if (activeCases.length === 0) return 'NONE';
+
+      const hasHighRisk = activeCases.some(c => 
+          c.generatedReport.riskLevel === 'High' || 
+          c.generatedReport.riskLevel === 'Critical'
+      );
+
+      return hasHighRisk ? 'HIGH' : 'MEDIUM';
   };
 
   return (
@@ -114,7 +124,7 @@ const StudentDirectory: React.FC<StudentDirectoryProps> = ({ onSelectStudent, on
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {filteredStudents.map(student => {
-          const risk = getRiskStatus(student.id);
+          const risk = getRiskStatus(student.name);
           return (
             <div
               key={student.id}
@@ -132,14 +142,14 @@ const StudentDirectory: React.FC<StudentDirectoryProps> = ({ onSelectStudent, on
                     }`}>
                       <User size={24} />
                     </div>
-                    {risk === 'HIGH' && (
-                        <div className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5 border-2 border-white" title="High Risk Alert">
+                    {risk !== 'NONE' && (
+                        <div className={`absolute -top-1 -right-1 text-white rounded-full p-0.5 border-2 border-white ${risk === 'HIGH' ? 'bg-red-500' : 'bg-orange-500'}`} title={`${risk} Risk Alert`}>
                             <Shield size={10} />
                         </div>
                     )}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h3 className={`font-semibold truncate ${risk === 'HIGH' ? 'text-red-800' : 'text-slate-800 group-hover:text-blue-700'}`}>
+                  <h3 className={`font-semibold truncate ${risk === 'HIGH' ? 'text-red-800' : risk === 'MEDIUM' ? 'text-orange-800' : 'text-slate-800 group-hover:text-blue-700'}`}>
                       {student.name}
                   </h3>
                   <div className="flex flex-wrap items-center gap-2 mt-1">

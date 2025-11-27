@@ -19,7 +19,8 @@ const RISK_COLORS = { Low: '#4ade80', Medium: '#facc15', High: '#fb923c', Critic
 
 const Dashboard: React.FC<DashboardProps> = ({ logs, safeguardingCases, behaviourEntries, onNavigate, currentUser }) => {
   const { t, language } = useLanguage();
-  const isLeader = ['Head of Year', 'DSL', 'Admin'].includes(currentUser.role);
+  // Updated to include 'Super Admin' so impersonating or viewing directly shows Leader view
+  const isLeader = ['Head of Year', 'DSL', 'Admin', 'Super Admin'].includes(currentUser.role);
 
   // Sentinel State
   const [isScanning, setIsScanning] = useState(false);

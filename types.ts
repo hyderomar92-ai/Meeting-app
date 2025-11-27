@@ -9,10 +9,12 @@ export enum MeetingType {
   OTHER = 'Other'
 }
 
+export type UserRole = 'Teacher' | 'Head of Year' | 'DSL' | 'Admin' | 'Super Admin';
+
 export interface UserProfile {
   id: string;
   name: string;
-  role: 'Teacher' | 'Head of Year' | 'DSL' | 'Admin' | 'Super Admin';
+  role: UserRole;
   initials: string;
   orgId?: string;
   email?: string;

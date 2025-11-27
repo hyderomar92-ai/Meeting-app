@@ -5,12 +5,13 @@ import { Search, User, Unlock, KeyRound, Link, Power, MessageSquare, Plus, Trash
 
 interface SuperAdminOperationsProps {
   allUsers: UserProfile[];
+  onUpdateUsers: (users: UserProfile[]) => void;
 }
 
 const DEFAULT_INCIDENT_TYPES = ['Bullying', 'Physical Abuse', 'Sexual Harassment', 'Online Safety', 'Substance Misuse', 'Neglect', 'Radicalization'];
 const DEFAULT_BEHAVIOR_TYPES = ['Disruption', 'Homework', 'Lateness', 'Uniform', 'Equipment', 'Defiance', 'Truancy'];
 
-const SuperAdminOperations: React.FC<SuperAdminOperationsProps> = ({ allUsers }) => {
+const SuperAdminOperations: React.FC<SuperAdminOperationsProps> = ({ allUsers, onUpdateUsers }) => {
   const [activeTab, setActiveTab] = useState<'SUPPORT' | 'MASTER_DATA' | 'COMMUNICATION'>('SUPPORT');
   
   // SUPPORT STATE
@@ -41,9 +42,32 @@ const SuperAdminOperations: React.FC<SuperAdminOperationsProps> = ({ allUsers })
   // HANDLERS
   const handleUserAction = (action: string) => {
       if(!selectedUser) return;
+      
+      // Perform actual logic based on action
+      let updatedUser = { ...selectedUser };
+      let successMessage = `${action} successful for ${selectedUser.name}.`;
+
+      if (action === 'Unlock Account') {
+          updatedUser.status = 'Active';
+      } else if (action === 'Kill Session' || action === 'Force Logout') {
+          // For simulation, we'll lock the account or just reset status if it was something else
+          // In a real app, this would invalidate a session token.
+          // Here let's toggle lock for demonstration or keep as Active but notify
+          successMessage = `Session terminated for ${selectedUser.name}.`;
+      } else if (action === 'Lock Account') {
+          updatedUser.status = 'Locked';
+          successMessage = `Account locked for ${selectedUser.name}.`;
+      }
+
+      // Update Global State if user changed
+      if (updatedUser.status !== selectedUser.status) {
+          onUpdateUsers(allUsers.map(u => u.id === updatedUser.id ? updatedUser : u));
+          setSelectedUser(updatedUser);
+      }
+
       setActionFeedback(`Executing: ${action}...`);
       setTimeout(() => {
-          setActionFeedback(`${action} successful for ${selectedUser.name}.`);
+          setActionFeedback(successMessage);
           setTimeout(() => setActionFeedback(null), 3000);
       }, 800);
   };
@@ -181,15 +205,27 @@ const SuperAdminOperations: React.FC<SuperAdminOperationsProps> = ({ allUsers })
                                     </div>
                                 </button>
 
-                                <button onClick={() => handleUserAction('Unlock Account')} className="flex items-center justify-center p-4 border border-slate-200 rounded-xl hover:border-indigo-300 hover:bg-indigo-50 transition-all group">
-                                    <div className="p-2 bg-amber-100 text-amber-600 rounded-lg mr-3 group-hover:bg-amber-200">
-                                        <Unlock size={20} />
-                                    </div>
-                                    <div className="text-left">
-                                        <p className="font-bold text-slate-800 text-sm">Unlock Account</p>
-                                        <p className="text-xs text-slate-500">Clear failed login attempts</p>
-                                    </div>
-                                </button>
+                                {selectedUser.status === 'Locked' ? (
+                                    <button onClick={() => handleUserAction('Unlock Account')} className="flex items-center justify-center p-4 border border-slate-200 rounded-xl hover:border-indigo-300 hover:bg-indigo-50 transition-all group">
+                                        <div className="p-2 bg-amber-100 text-amber-600 rounded-lg mr-3 group-hover:bg-amber-200">
+                                            <Unlock size={20} />
+                                        </div>
+                                        <div className="text-left">
+                                            <p className="font-bold text-slate-800 text-sm">Unlock Account</p>
+                                            <p className="text-xs text-slate-500">Clear failed login attempts</p>
+                                        </div>
+                                    </button>
+                                ) : (
+                                    <button onClick={() => handleUserAction('Lock Account')} className="flex items-center justify-center p-4 border border-slate-200 rounded-xl hover:border-red-300 hover:bg-red-50 transition-all group">
+                                        <div className="p-2 bg-red-100 text-red-600 rounded-lg mr-3 group-hover:bg-red-200">
+                                            <Power size={20} />
+                                        </div>
+                                        <div className="text-left">
+                                            <p className="font-bold text-slate-800 text-sm">Lock Account</p>
+                                            <p className="text-xs text-slate-500">Prevent user login immediately</p>
+                                        </div>
+                                    </button>
+                                )}
 
                                 <button onClick={() => handleUserAction('Kill Session')} className="flex items-center justify-center p-4 border border-slate-200 rounded-xl hover:border-red-300 hover:bg-red-50 transition-all group">
                                     <div className="p-2 bg-red-100 text-red-600 rounded-lg mr-3 group-hover:bg-red-200">
