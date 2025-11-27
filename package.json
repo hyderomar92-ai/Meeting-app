@@ -15,7 +15,8 @@
     "lucide-react": "^0.554.0",
     "xlsx": "^0.18.5",
     "html2canvas": "^1.4.1",
-    "react-dom": "^19.2.0"
+    "react-dom": "^19.2.0",
+    "@okta/okta-auth-js": "^7.14.1"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

@@ -1,9 +1,9 @@
-
 import React, { useState, useEffect } from 'react';
 import { 
   UserProfile, ViewState, MeetingLog, BehaviourEntry, SafeguardingCase, 
-  Organization, RoleDefinition, ActionItem 
+  Organization, RoleDefinition, ActionItem
 } from './types';
+import { authService } from './services/authService';
 import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
 import MeetingForm from './components/MeetingForm';
@@ -30,10 +30,12 @@ import SuperAdminResources from './components/SuperAdminResources';
 import SuperAdminBranding from './components/SuperAdminBranding';
 import SuperAdminFeedback from './components/SuperAdminFeedback';
 import OrgAdminSettings from './components/OrgAdminSettings';
+import { Loader2 } from 'lucide-react';
 
 const App: React.FC = () => {
   // Auth State
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
   
   // Navigation State
   const [currentView, setCurrentView] = useState<ViewState>('DASHBOARD');
@@ -46,13 +48,7 @@ const App: React.FC = () => {
   const [safeguarding, setSafeguarding] = useState<SafeguardingCase[]>([]);
   
   // Admin Data State
-  const [users, setUsers] = useState<UserProfile[]>([
-      { id: 'u1', name: 'Demo Teacher', role: 'Teacher', initials: 'DT', status: 'Active', orgId: 'org-1' },
-      { id: 'u2', name: 'Head of Year', role: 'Head of Year', initials: 'HY', status: 'Active', orgId: 'org-1' },
-      { id: 'u3', name: 'Safeguarding Lead', role: 'DSL', initials: 'SL', status: 'Active', orgId: 'org-1' },
-      { id: 'u4', name: 'IT Admin', role: 'IT Admin', initials: 'IT', status: 'Active', orgId: 'org-1' },
-      { id: 'u0', name: 'System Owner', role: 'Super Admin', initials: 'SO', status: 'Active' }
-  ]);
+  const [users, setUsers] = useState<UserProfile[]>([]); 
   const [organizations, setOrganizations] = useState<Organization[]>([
       { 
           id: 'org-1', name: 'Springfield Academy', type: 'School', status: 'Active', licenseTier: 'Pro', 
@@ -63,8 +59,24 @@ const App: React.FC = () => {
   ]);
   const [roles, setRoles] = useState<RoleDefinition[]>([]);
 
-  // Tenant Data Helper
-  const tenantData = { logs, behavior, safeguarding };
+  // --- IDENTITY SERVICE INTEGRATION ---
+  useEffect(() => {
+    const initAuth = async () => {
+        // Check for active session in Local Identity Provider
+        const user = authService.getCurrentUser();
+        
+        if (user) {
+            setCurrentUser(user);
+            // Redirect Super Admins to Command Center by default
+            setCurrentView(user.role === 'Super Admin' ? 'SUPER_ADMIN_DASHBOARD' : 'DASHBOARD');
+        } else {
+            setCurrentUser(null);
+        }
+        setIsAuthLoading(false);
+    };
+
+    initAuth();
+  }, []);
 
   // Effects to load/save data
   useEffect(() => {
@@ -101,7 +113,8 @@ const App: React.FC = () => {
       setCurrentView(user.role === 'Super Admin' ? 'SUPER_ADMIN_DASHBOARD' : 'DASHBOARD');
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+      await authService.logout();
       setCurrentUser(null);
       setCurrentView('DASHBOARD');
       setSelectedStudent(undefined);
@@ -167,6 +180,16 @@ const App: React.FC = () => {
       setOrganizations([...organizations, org]);
       setUsers([...users, admin]);
   };
+
+  if (isAuthLoading) {
+      return (
+          <div className="h-screen w-screen bg-slate-900 flex flex-col items-center justify-center text-white">
+              <Loader2 size={48} className="animate-spin mb-4 text-emerald-500" />
+              <h2 className="text-xl font-bold">Initializing Secure Environment...</h2>
+              <p className="text-slate-400 mt-2">Checking Identity Provider</p>
+          </div>
+      );
+  }
 
   if (!currentUser) {
       return (
