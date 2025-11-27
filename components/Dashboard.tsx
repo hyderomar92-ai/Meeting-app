@@ -1,8 +1,8 @@
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { MeetingLog, MeetingType, UserProfile, SafeguardingCase, BehaviourEntry, RiskAlert, ViewState } from '../types';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
-import { Users, Calendar, ClipboardList, AlertCircle, User as UserIcon, Shield, ChevronRight, TrendingUp, TrendingDown, Star, BarChart2, Activity, Zap, BrainCircuit, Loader2, ArrowRight, Plus, Search, FileText, CheckSquare } from 'lucide-react';
+import { Users, Calendar, ClipboardList, AlertCircle, User as UserIcon, Shield, ChevronRight, TrendingUp, TrendingDown, Star, BarChart2, Activity, Zap, BrainCircuit, Loader2, ArrowRight, Plus, Search, FileText, CheckSquare, Clock, Siren } from 'lucide-react';
 import { scanForRisks } from '../services/geminiService';
 import { useLanguage } from '../contexts/LanguageContext';
 
@@ -19,7 +19,6 @@ const RISK_COLORS = { Low: '#4ade80', Medium: '#facc15', High: '#fb923c', Critic
 
 const Dashboard: React.FC<DashboardProps> = ({ logs, safeguardingCases, behaviourEntries, onNavigate, currentUser }) => {
   const { t, language } = useLanguage();
-  // Updated to include 'Super Admin' so impersonating or viewing directly shows Leader view
   const isLeader = ['Head of Year', 'DSL', 'Admin', 'Super Admin'].includes(currentUser.role);
 
   // Sentinel State
@@ -27,16 +26,52 @@ const Dashboard: React.FC<DashboardProps> = ({ logs, safeguardingCases, behaviou
   const [riskAlerts, setRiskAlerts] = useState<RiskAlert[]>([]);
   const [hasScanned, setHasScanned] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
+  const [lastScanTime, setLastScanTime] = useState<string | null>(null);
+
+  // --- Scan Schedule Logic ---
+  const getNextScheduledScan = () => {
+      const now = new Date();
+      const currentHour = now.getHours();
+      const currentMin = now.getMinutes();
+      const timeVal = currentHour + currentMin / 60;
+
+      if (timeVal < 8) return "08:00 (Registration)";
+      if (timeVal < 10.5) return "10:30 (Morning Break)";
+      if (timeVal < 12.5) return "12:30 (Lunch)";
+      if (timeVal < 15) return "15:00 (Dismissal)";
+      return "08:00 (Tomorrow)";
+  };
+
+  const handleRunSentinel = async (auto = false) => {
+      setIsScanning(true);
+      setScanError(null);
+      try {
+          const results = await scanForRisks(logs, behaviourEntries, language);
+          setRiskAlerts(results);
+          setHasScanned(true);
+          setLastScanTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+      } catch (e) {
+          console.error(e);
+          if (!auto) setScanError("Sentinel scan failed to complete. Please check your connection and try again.");
+      } finally {
+          setIsScanning(false);
+      }
+  };
+
+  // Auto-run Sentinel for Leaders on mount
+  useEffect(() => {
+      if (isLeader && !hasScanned) {
+          handleRunSentinel(true);
+      }
+  }, [isLeader]);
 
   // --- Common Stats ---
   const totalMeetings = logs.length;
-  const uniqueStudents = new Set(logs.flatMap(l => l.attendees)).size;
   
   // My Pending Actions
   const myPendingActions = useMemo(() => {
       const actions: {id: string, task: string, date: string, student: string}[] = [];
       logs.forEach(l => {
-          // Ideally we filter by assignee, for now assuming createdBy is responsible or it's shared
           if (l.createdBy === currentUser.name || isLeader) {
               l.actionItems?.forEach(item => {
                   if (item.status === 'Pending') {
@@ -68,8 +103,6 @@ const Dashboard: React.FC<DashboardProps> = ({ logs, safeguardingCases, behaviou
   const todayNet = todaysEntries.reduce((acc, curr) => acc + curr.points, 0);
 
   // --- Charts Data ---
-
-  // 1. Meeting Types Distribution
   const typeCount = logs.reduce((acc, log) => {
     acc[log.type] = (acc[log.type] || 0) + 1;
     return acc;
@@ -80,7 +113,6 @@ const Dashboard: React.FC<DashboardProps> = ({ logs, safeguardingCases, behaviou
     value: typeCount[type]
   }));
 
-  // 2. Risk Distribution (Leadership Only)
   const riskDistribution = useMemo(() => {
     const counts = { Low: 0, Medium: 0, High: 0, Critical: 0 };
     safeguardingCases.forEach(c => {
@@ -90,7 +122,6 @@ const Dashboard: React.FC<DashboardProps> = ({ logs, safeguardingCases, behaviou
     return Object.keys(counts).map(key => ({ name: key, count: counts[key as keyof typeof counts] }));
   }, [safeguardingCases]);
 
-  // 3. Staff Leaderboard (Leadership Only)
   const staffActivity = useMemo(() => {
     const counts: Record<string, number> = {};
     logs.forEach(l => {
@@ -98,34 +129,64 @@ const Dashboard: React.FC<DashboardProps> = ({ logs, safeguardingCases, behaviou
     });
     return Object.entries(counts)
         .sort((a, b) => b[1] - a[1])
-        .slice(0, 5) // Top 5
+        .slice(0, 5)
         .map(([name, count]) => ({ name, count }));
   }, [logs]);
 
-  // --- Recent Logs Filtering ---
-  // If Leader, show everything. If Teacher, prefer their own logs, or show all if they have none.
+  const behaviourTrendData = useMemo(() => {
+    const data = [];
+    const today = new Date();
+    for (let i = 29; i >= 0; i--) {
+        const d = new Date(today);
+        d.setDate(d.getDate() - i);
+        const dateStr = d.toISOString().split('T')[0];
+        
+        const entriesForDay = behaviourEntries.filter(e => e.date.startsWith(dateStr));
+        const positive = entriesForDay.filter(e => e.type === 'POSITIVE').reduce((acc, e) => acc + e.points, 0);
+        const negative = entriesForDay.filter(e => e.type === 'NEGATIVE').reduce((acc, e) => acc + Math.abs(e.points), 0);
+        
+        data.push({
+            name: d.toLocaleDateString(language === 'ar' ? 'ar-QA' : 'en-US', { month: 'short', day: 'numeric' }),
+            Positive: positive,
+            Negative: negative
+        });
+    }
+    return data;
+  }, [behaviourEntries, language]);
+
   const myLogs = logs.filter(l => l.createdBy === currentUser.name);
   const logsToDisplay = isLeader ? logs : (myLogs.length > 0 ? myLogs : logs);
   const recentLogs = [...logsToDisplay].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 5);
 
-  const handleRunSentinel = async () => {
-      setIsScanning(true);
-      setScanError(null);
-      setHasScanned(false);
-      try {
-          const results = await scanForRisks(logs, behaviourEntries, language);
-          setRiskAlerts(results);
-          setHasScanned(true);
-      } catch (e) {
-          console.error(e);
-          setScanError("Sentinel scan failed to complete. Please check your connection and try again.");
-      } finally {
-          setIsScanning(false);
-      }
-  };
+  const highPriorityAlerts = riskAlerts.filter(a => a.riskScore >= 75);
 
   return (
     <div className="space-y-6 animate-fade-in">
+      
+      {/* PROMINENT CRITICAL ALERT BANNER */}
+      {highPriorityAlerts.length > 0 && (
+          <div className="bg-red-600 rounded-xl shadow-lg shadow-red-200 p-4 text-white flex flex-col sm:flex-row items-center justify-between animate-pulse-subtle border-2 border-red-500">
+              <div className="flex items-center mb-3 sm:mb-0">
+                  <div className="p-3 bg-white/20 rounded-full mr-4">
+                      <Siren size={32} className="text-white animate-bounce" />
+                  </div>
+                  <div>
+                      <h2 className="text-xl font-black uppercase tracking-wider">Critical Risk Detected</h2>
+                      <p className="text-red-100 font-medium">{highPriorityAlerts.length} student(s) showing immediate high-risk patterns.</p>
+                  </div>
+              </div>
+              <button 
+                  onClick={() => {
+                      const element = document.getElementById('sentinel-results');
+                      element?.scrollIntoView({ behavior: 'smooth' });
+                  }}
+                  className="px-6 py-2 bg-white text-red-600 font-bold rounded-lg hover:bg-red-50 transition-colors shadow-sm"
+              >
+                  Review Alerts
+              </button>
+          </div>
+      )}
+
       <header className="mb-6 flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
            <div className="flex items-center space-x-2 text-slate-400 text-sm mb-1 font-medium uppercase tracking-wide">
@@ -175,28 +236,39 @@ const Dashboard: React.FC<DashboardProps> = ({ logs, safeguardingCases, behaviou
                 <BrainCircuit size={120} />
             </div>
             <div className="p-6 relative z-10">
-                <div className="flex justify-between items-start mb-4">
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
                     <div>
-                        <div className="flex items-center space-x-2 mb-2">
+                        <div className="flex items-center space-x-3 mb-2">
                             <Zap className="text-indigo-400" size={24} />
                             <h2 className="text-xl font-bold text-white tracking-wide">Predictive Safeguarding Sentinel</h2>
+                            <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-bold uppercase tracking-wider flex items-center">
+                                <Activity size={10} className="mr-1" /> Auto-Pilot Active
+                            </span>
                         </div>
-                        <p className="text-slate-400 text-sm max-w-xl">
-                            AI scans logs and behavior data in real-time to flag "emerging risks" before they become crises.
+                        <p className="text-slate-400 text-sm">
+                            Real-time analysis of behavioral patterns and risk indicators.
                         </p>
                     </div>
-                    <button 
-                        onClick={handleRunSentinel}
-                        disabled={isScanning}
-                        className={`px-5 py-2.5 rounded-lg font-bold text-sm shadow-lg transition-all flex items-center ${
-                            isScanning 
-                            ? 'bg-indigo-900 text-indigo-300 cursor-not-allowed' 
-                            : 'bg-indigo-600 hover:bg-indigo-50 text-white shadow-indigo-900/50'
-                        }`}
-                    >
-                        {isScanning ? <Loader2 size={16} className="animate-spin mr-2" /> : <Activity size={16} className="mr-2" />}
-                        {isScanning ? 'Scanning Data...' : 'Scan for Risks'}
-                    </button>
+                    
+                    <div className="flex items-center space-x-4 bg-white/5 p-2 rounded-lg border border-white/10">
+                        <div className="text-right px-2">
+                            <p className="text-[10px] text-slate-400 uppercase font-bold">Last Scan</p>
+                            <p className="text-sm font-mono text-white">{lastScanTime || 'Pending...'}</p>
+                        </div>
+                        <div className="h-8 w-px bg-white/10"></div>
+                        <div className="text-right px-2">
+                            <p className="text-[10px] text-slate-400 uppercase font-bold">Next Scan</p>
+                            <p className="text-sm font-mono text-indigo-300">{getNextScheduledScan()}</p>
+                        </div>
+                        <button 
+                            onClick={() => handleRunSentinel(false)}
+                            disabled={isScanning}
+                            className={`ml-2 p-2 rounded-lg transition-colors ${isScanning ? 'bg-indigo-900 text-indigo-400' : 'bg-indigo-600 hover:bg-indigo-500 text-white'}`}
+                            title="Run Manual Scan"
+                        >
+                            {isScanning ? <Loader2 size={18} className="animate-spin" /> : <Clock size={18} />}
+                        </button>
+                    </div>
                 </div>
 
                 {scanError && (
@@ -207,51 +279,61 @@ const Dashboard: React.FC<DashboardProps> = ({ logs, safeguardingCases, behaviou
                 )}
 
                 {hasScanned && riskAlerts.length === 0 && !scanError && (
-                    <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700 flex items-center text-green-400">
+                    <div className="bg-emerald-900/20 rounded-lg p-4 border border-emerald-500/30 flex items-center text-emerald-400">
                         <Shield size={20} className="mr-3" />
-                        <span className="font-medium">No high-risk patterns detected in the last 30 days.</span>
+                        <span className="font-medium">System Clear. No elevated risk patterns detected in the last 24h.</span>
                     </div>
                 )}
 
-                {hasScanned && riskAlerts.length > 0 && !scanError && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 animate-slide-up">
-                        {riskAlerts.map((alert, idx) => (
-                            <div key={idx} className="bg-slate-800 rounded-lg p-4 border border-red-500/30 hover:border-red-500/60 transition-colors">
-                                <div className="flex justify-between items-start mb-2">
-                                    <h3 className="font-bold text-lg text-white">{alert.studentName}</h3>
-                                    <span className={`px-2 py-0.5 rounded text-xs font-bold uppercase ${
-                                        alert.riskScore > 80 ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'bg-orange-500/20 text-orange-400 border border-orange-500/30'
-                                    }`}>
-                                        Risk Score: {alert.riskScore}%
-                                    </span>
+                <div id="sentinel-results">
+                    {hasScanned && riskAlerts.length > 0 && !scanError && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 animate-slide-up">
+                            {riskAlerts.map((alert, idx) => (
+                                <div key={idx} className={`bg-slate-800 rounded-lg p-4 border transition-colors ${alert.riskScore > 75 ? 'border-red-500/60 shadow-[0_0_15px_rgba(239,68,68,0.2)]' : 'border-slate-700'}`}>
+                                    <div className="flex justify-between items-start mb-2">
+                                        <h3 className="font-bold text-lg text-white">{alert.studentName}</h3>
+                                        <span className={`px-2 py-0.5 rounded text-xs font-bold uppercase ${
+                                            alert.riskScore > 75 ? 'bg-red-500 text-white' : 'bg-orange-500/20 text-orange-400 border border-orange-500/30'
+                                        }`}>
+                                            Risk Score: {alert.riskScore}%
+                                        </span>
+                                    </div>
+                                    <div className="mb-2">
+                                        <p className="text-xs text-indigo-300 font-bold uppercase tracking-wider mb-1">Pattern Detected</p>
+                                        <p className="text-sm text-slate-200 font-medium flex items-start">
+                                            <AlertCircle size={14} className="mr-2 mt-0.5 text-red-400 flex-shrink-0" />
+                                            {alert.riskFactor}
+                                        </p>
+                                        <p className="text-xs text-slate-400 ml-6 mt-1">{alert.details}</p>
+                                    </div>
+                                    <div className="mt-3 pt-3 border-t border-slate-700/50">
+                                        <p className="text-xs text-indigo-300 font-bold uppercase tracking-wider mb-1">AI Recommendation</p>
+                                        <div className="flex justify-between items-end">
+                                            <p className="text-sm text-green-400">{alert.suggestedIntervention}</p>
+                                            <button 
+                                                onClick={() => onNavigate('STUDENT_PROFILE', alert.studentName)}
+                                                className="text-xs bg-slate-700 hover:bg-slate-600 text-white px-2 py-1 rounded ml-2 whitespace-nowrap transition-colors"
+                                            >
+                                                View Profile
+                                            </button>
+                                        </div>
+                                    </div>
                                 </div>
-                                <div className="mb-2">
-                                    <p className="text-xs text-indigo-300 font-bold uppercase tracking-wider mb-1">Pattern Detected</p>
-                                    <p className="text-sm text-slate-200 font-medium flex items-start">
-                                        <AlertCircle size={14} className="mr-2 mt-0.5 text-red-400 flex-shrink-0" />
-                                        {alert.riskFactor}
-                                    </p>
-                                    <p className="text-xs text-slate-400 ml-6 mt-1">{alert.details}</p>
-                                </div>
-                                <div className="mt-3 pt-3 border-t border-slate-700/50">
-                                     <p className="text-xs text-indigo-300 font-bold uppercase tracking-wider mb-1">AI Recommendation</p>
-                                     <p className="text-sm text-green-400">{alert.suggestedIntervention}</p>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                )}
+                            ))}
+                        </div>
+                    )}
+                </div>
             </div>
         </div>
       )}
 
-      {/* Critical Risks Watchlist (Leadership) */}
+      {/* Critical Risks Watchlist (Manual/Existing Cases) */}
       {isLeader && activeHighRiskCount > 0 && (
         <div className="bg-red-50 rounded-xl border border-red-200 overflow-hidden mb-8 animate-fade-in shadow-sm">
             <div className="p-4 bg-red-100/50 border-b border-red-200 flex justify-between items-center">
                 <div className="flex items-center space-x-2 text-red-800">
                     <Shield size={20} className="text-red-600" />
-                    <h3 className="font-bold">Critical Safeguarding Attention Required ({activeHighRiskCount})</h3>
+                    <h3 className="font-bold">Active High-Risk Cases ({activeHighRiskCount})</h3>
                 </div>
                 <button 
                   onClick={() => onNavigate('SAFEGUARDING')} 
@@ -415,6 +497,40 @@ const Dashboard: React.FC<DashboardProps> = ({ logs, safeguardingCases, behaviou
                     </div>
                  </div>
               )}
+
+              {/* Behaviour Trends (New Chart) */}
+              <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">
+                    <h3 className="text-lg font-bold text-slate-800 mb-6 flex items-center">
+                        <TrendingUp size={18} className="mr-2 text-indigo-500" />
+                        Behaviour Trends (30 Days)
+                    </h3>
+                    <div className="h-64 w-full">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={behaviourTrendData}>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                <XAxis 
+                                    dataKey="name" 
+                                    axisLine={false} 
+                                    tickLine={false} 
+                                    tick={{fontSize: 10, fill: '#94a3b8'}} 
+                                    minTickGap={30}
+                                />
+                                <YAxis 
+                                    axisLine={false} 
+                                    tickLine={false} 
+                                    tick={{fontSize: 10, fill: '#94a3b8'}} 
+                                />
+                                <Tooltip 
+                                    cursor={{fill: '#f8fafc'}}
+                                    contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'}}
+                                />
+                                <Legend iconType="circle" wrapperStyle={{fontSize: '12px', paddingTop: '10px'}} />
+                                <Bar dataKey="Positive" fill="#4ade80" radius={[4, 4, 0, 0]} barSize={8} name="Merits" />
+                                <Bar dataKey="Negative" fill="#f87171" radius={[4, 4, 0, 0]} barSize={8} name="Sanctions" />
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </div>
+              </div>
 
               {/* Recent Logs */}
               <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100">

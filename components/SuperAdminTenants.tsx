@@ -1,11 +1,11 @@
 
 import React, { useState } from 'react';
-import { Organization } from '../types';
+import { Organization, UserProfile } from '../types';
 import { Building2, Search, Globe, Plus, Trash2, Edit, CheckCircle2, X, Settings, Shield, BrainCircuit, MessageSquare, CreditCard, Eye } from 'lucide-react';
 
 interface SuperAdminTenantsProps {
   organizations: Organization[];
-  onAddOrg: (org: Organization) => void;
+  onAddOrg: (org: Organization, initialAdmin?: UserProfile) => void;
   onUpdateOrg: (org: Organization) => void;
   onImpersonate: (orgId: string) => void;
 }
@@ -26,13 +26,17 @@ const SuperAdminTenants: React.FC<SuperAdminTenantsProps> = ({ organizations, on
       e.preventDefault();
       const form = e.target as HTMLFormElement;
       const formData = new FormData(form);
+      
+      const orgId = crypto.randomUUID();
+      const orgName = formData.get('orgName') as string;
+
       const newOrg: Organization = {
-          id: crypto.randomUUID(),
-          name: formData.get('orgName') as string,
+          id: orgId,
+          name: orgName,
           type: formData.get('orgType') as any,
           status: 'Active',
           licenseTier: formData.get('licenseTier') as any,
-          staffCount: 0,
+          staffCount: 1, // Starts with 1 admin
           studentCount: 0,
           renewalDate: new Date(new Date().setFullYear(new Date().getFullYear() + 1)).toISOString().split('T')[0],
           tokenUsageCurrentPeriod: 0,
@@ -44,7 +48,19 @@ const SuperAdminTenants: React.FC<SuperAdminTenantsProps> = ({ organizations, on
               parentPortal: false
           }
       };
-      onAddOrg(newOrg);
+
+      // Create Initial Admin User
+      const initialAdmin: UserProfile = {
+          id: crypto.randomUUID(),
+          name: 'School Admin',
+          email: `admin@${orgName.toLowerCase().replace(/\s+/g, '')}.edu`, // Mock email generation
+          role: 'Admin',
+          initials: 'SA',
+          orgId: orgId,
+          status: 'Active'
+      };
+
+      onAddOrg(newOrg, initialAdmin);
       setShowAddModal(false);
   };
 

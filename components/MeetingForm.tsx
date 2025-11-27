@@ -2,7 +2,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { MeetingType, MeetingLog, ActionItem, UserProfile } from '../types';
 import { analyzeLogEntry, generateSmartActions } from '../services/geminiService';
-import { Sparkles, Save, X, Plus, Loader2, User, AlertCircle, Mic, MicOff, FileText, Zap, ShieldAlert, ArrowRight, Tag, Check, Cloud } from 'lucide-react';
+import { Sparkles, Save, X, Plus, Loader2, User, AlertCircle, Mic, MicOff, FileText, Zap, ShieldAlert, ArrowRight, Tag, Check, Cloud, Mail } from 'lucide-react';
 import { STUDENTS } from '../data/students';
 import { useLanguage } from '../contexts/LanguageContext';
 
@@ -56,6 +56,10 @@ const MeetingForm: React.FC<MeetingFormProps> = ({ onSubmit, onCancel, initialAt
   // Autosave visual state (simulated)
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved');
   
+  // Email State
+  const [sendEmail, setSendEmail] = useState(false);
+  const [emailAddress, setEmailAddress] = useState('');
+
   const wrapperRef = useRef<HTMLDivElement>(null);
 
   // Simulated Auto-save trigger
@@ -301,6 +305,21 @@ const MeetingForm: React.FC<MeetingFormProps> = ({ onSubmit, onCancel, initialAt
       sentiment,
       createdBy: currentUser.name
     };
+
+    if (sendEmail && emailAddress) {
+        const subject = encodeURIComponent(`Meeting Log: ${attendees.join(', ')}`);
+        const body = encodeURIComponent(
+            `Meeting Details:\n` +
+            `Date: ${date} ${time}\n` +
+            `Type: ${type}\n` +
+            `Attendees: ${attendees.join(', ')}\n\n` +
+            `Notes:\n${finalNotes}\n\n` +
+            `Actions:\n${finalActionItems.map(a => `- ${a.task}`).join('\n')}\n\n` +
+            `Logged by: ${currentUser.name}`
+        );
+        window.location.href = `mailto:${emailAddress}?subject=${subject}&body=${body}`;
+    }
+
     onSubmit(newLog);
   };
 
@@ -608,7 +627,39 @@ const MeetingForm: React.FC<MeetingFormProps> = ({ onSubmit, onCancel, initialAt
           </div>
         </div>
 
-        <div className="flex justify-end space-x-4 pt-4 border-t border-slate-200">
+        {/* Email Notification Section */}
+        <div className="pt-4 border-t border-slate-200">
+            <label className="flex items-center space-x-2 cursor-pointer mb-3">
+                <input 
+                    type="checkbox" 
+                    checked={sendEmail} 
+                    onChange={(e) => setSendEmail(e.target.checked)}
+                    className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500 border-gray-300"
+                />
+                <span className="text-sm font-medium text-slate-700 flex items-center">
+                    <Mail size={16} className="mr-2 text-slate-400" />
+                    Email a copy of this log
+                </span>
+            </label>
+            
+            {sendEmail && (
+                <div className="ml-6 animate-fade-in mb-4">
+                    <input 
+                        type="email" 
+                        value={emailAddress}
+                        onChange={(e) => setEmailAddress(e.target.value)}
+                        placeholder="Enter recipient email address..."
+                        className="w-full max-w-md px-4 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                        required={sendEmail}
+                    />
+                    <p className="text-xs text-slate-500 mt-1">
+                        Submitting will open your default email client with these notes pre-filled.
+                    </p>
+                </div>
+            )}
+        </div>
+
+        <div className="flex justify-end space-x-4 pt-2 border-t border-slate-200">
            <button 
               type="button" 
               onClick={onCancel}

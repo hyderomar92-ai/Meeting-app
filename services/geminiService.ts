@@ -175,10 +175,22 @@ export const analyzeLogEntry = async (rawNotes: string, language: string = 'en')
             3. **Action Items**: Extract actionable tasks in ${language}.
             4. **Sentiment**: 'Positive', 'Neutral', or 'Concerned'.
             5. **Location**: Infer the location (e.g., Classroom, Playground) if mentioned or implied.
-            6. **Safeguarding Scan**: CRITICAL. Detect if this entry describes bullying, abuse, neglect, radicalization, or serious behavioral incidents. 
-               - Set 'flagged' to true if ANY risk is detected.
-               - Assign a 'riskLevel' (Low/Medium/High/Critical).
-               - Provide a short 'reason' for the flag.
+            6. **Safeguarding Scan**: CRITICAL. Perform a deep scan for potential safeguarding risks based on context and keywords.
+               Look for indicators of:
+               - **Physical Abuse**: Unexplained injuries, hitting, bruising, cuts, pain, flinching, aggressive contact.
+               - **Emotional Abuse**: Withdrawal, anxiety, sudden behavioral changes, fear, self-harm mentions, humiliation.
+               - **Neglect**: Hygiene issues, hunger, inappropriate clothing for weather, fatigue, medical neglect.
+               - **Bullying/Peer Abuse**: Exclusion, name-calling, threats, cyberbullying, physical aggression between students.
+               - **Radicalization/Extremism**: Hate speech, intolerance, concerning ideology, 'us vs them' language.
+               - **Sexual Harassment/Abuse**: Inappropriate language, touching, grooming behaviors, sexualized behavior.
+
+               - Set 'flagged' to true if ANY risk is detected based on these keywords and context.
+               - Assign a 'riskLevel' based on severity:
+                 - **Low**: Minor concern, monitoring required (e.g., "tired", "slightly withdrawn", "argument").
+                 - **Medium**: Clear concern, intervention needed (e.g., "repeated exclusion", "unkempt", "nasty comments").
+                 - **High**: Serious incident, potential harm (e.g., "fighting", "disclosure of fear", "hate speech").
+                 - **Critical**: Immediate danger, severe harm (e.g., "physical injury", "disclosure of abuse", "weapon").
+               - Provide a short 'reason' for the flag in ${language}.
 
             Output strictly JSON.
             `,

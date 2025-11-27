@@ -16,7 +16,7 @@ export interface UserProfile {
   name: string;
   role: UserRole;
   initials: string;
-  orgId?: string;
+  orgId?: string; // Links user to specific tenant
   email?: string;
   lastLogin?: string;
   status?: 'Active' | 'Locked' | 'Suspended';
@@ -53,6 +53,7 @@ export interface ActionItem {
 
 export interface MeetingLog {
   id: string;
+  orgId?: string; // Tenancy
   date: string;
   time: string;
   attendees: string[]; // List of names (Students, Parents, etc.)
@@ -65,6 +66,7 @@ export interface MeetingLog {
 
 export interface BehaviourEntry {
   id: string;
+  orgId?: string; // Tenancy
   studentName: string;
   studentClass?: string;
   date: string;
@@ -84,6 +86,7 @@ export interface StudentStats {
 
 export interface SafeguardingCase {
   id: string;
+  orgId?: string; // Tenancy
   studentName: string;
   date: string;
   incidentType: string;
@@ -150,6 +153,7 @@ export type ViewState =
   | 'HISTORY' 
   | 'STUDENT_PROFILE' 
   | 'STUDENTS_DIRECTORY' 
+  | 'CLASS_OVERVIEW'
   | 'SAFEGUARDING' 
   | 'REPORTS' 
   | 'BEHAVIOUR' 
