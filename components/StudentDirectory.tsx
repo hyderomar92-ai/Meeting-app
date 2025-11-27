@@ -8,26 +8,41 @@ interface StudentDirectoryProps {
   onSelectStudent: (name: string) => void;
   onQuickLog: (name: string) => void;
   safeguardingCases?: SafeguardingCase[];
+  userScope?: string[]; // Array of allowed year groups (e.g. ['07', '08'])
 }
 
-const StudentDirectory: React.FC<StudentDirectoryProps> = ({ onSelectStudent, onQuickLog, safeguardingCases = [] }) => {
+const StudentDirectory: React.FC<StudentDirectoryProps> = ({ onSelectStudent, onQuickLog, safeguardingCases = [], userScope }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedClass, setSelectedClass] = useState('');
   const [selectedYear, setSelectedYear] = useState('');
 
-  // Extract unique options for filters
+  // Extract unique options for filters based on SCOPE
   const { classes, years } = useMemo(() => {
-    const uniqueClasses = new Set(STUDENTS.map(s => s.studentClass).filter(Boolean));
-    // Assuming class format '01A', '09B' -> Year is first 2 chars
-    const uniqueYears = new Set(STUDENTS.map(s => s.studentClass ? s.studentClass.substring(0, 2) : '').filter(Boolean));
+    // 1. Filter source students based on RBAC scope first
+    let visibleStudents = STUDENTS;
+    if (userScope && userScope.length > 0) {
+        visibleStudents = STUDENTS.filter(s => 
+            s.studentClass && userScope.some(year => s.studentClass!.startsWith(year))
+        );
+    }
+
+    // 2. Generate filter options from visible students
+    const uniqueClasses = new Set(visibleStudents.map(s => s.studentClass).filter(Boolean));
+    const uniqueYears = new Set(visibleStudents.map(s => s.studentClass ? s.studentClass.substring(0, 2) : '').filter(Boolean));
     
     return {
       classes: Array.from(uniqueClasses).sort(),
       years: Array.from(uniqueYears).sort()
     };
-  }, []);
+  }, [userScope]);
 
   const filteredStudents = STUDENTS.filter(student => {
+    // RBAC Check
+    if (userScope && userScope.length > 0) {
+        const studentYear = student.studentClass ? student.studentClass.substring(0, 2) : '';
+        if (!userScope.includes(studentYear)) return false;
+    }
+
     const matchesSearch = 
       student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       student.id.toLowerCase().includes(searchTerm.toLowerCase());

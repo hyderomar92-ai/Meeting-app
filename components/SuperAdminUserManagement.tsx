@@ -1,7 +1,8 @@
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { UserProfile } from '../types';
-import { Search, User, Plus, Edit2, Trash2, Lock, Unlock, KeyRound, Power, Link, CheckCircle2, X, Save, Mail, Shield } from 'lucide-react';
+import { Search, User, Plus, Edit2, Trash2, Lock, Unlock, KeyRound, Power, Link, CheckCircle2, X, Save, Mail, Shield, Layers } from 'lucide-react';
+import { STUDENTS } from '../data/students';
 
 interface SuperAdminUserManagementProps {
   users: UserProfile[];
@@ -14,6 +15,16 @@ const SuperAdminUserManagement: React.FC<SuperAdminUserManagementProps> = ({ use
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
   const [actionFeedback, setActionFeedback] = useState<string | null>(null);
+  
+  // Form specific state for scope
+  const [selectedYearGroups, setSelectedYearGroups] = useState<string[]>([]);
+  const [selectedRole, setSelectedRole] = useState<string>('Teacher');
+
+  // Extract unique years from student data
+  const availableYears = useMemo(() => {
+      const years = new Set(STUDENTS.map(s => s.studentClass ? s.studentClass.substring(0, 2) : '').filter(Boolean));
+      return Array.from(years).sort();
+  }, []);
 
   // Filter Users
   const filteredUsers = users.filter(u => 
@@ -35,6 +46,8 @@ const SuperAdminUserManagement: React.FC<SuperAdminUserManagementProps> = ({ use
     
     const initials = name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
 
+    const userScope = (role === 'Head of Year' || role === 'Teacher') ? selectedYearGroups : undefined;
+
     if (editingUser) {
       // Edit Mode
       const updatedUsers = users.map(u => u.id === editingUser.id ? {
@@ -43,11 +56,12 @@ const SuperAdminUserManagement: React.FC<SuperAdminUserManagementProps> = ({ use
         email,
         role,
         orgId,
-        initials
+        initials,
+        allowedYearGroups: userScope
       } : u);
       onUpdateUsers(updatedUsers);
       if (selectedUser?.id === editingUser.id) {
-          setSelectedUser({ ...selectedUser, name, email, role, orgId, initials });
+          setSelectedUser({ ...selectedUser, name, email, role, orgId, initials, allowedYearGroups: userScope });
       }
       showFeedback(`User ${name} updated successfully.`);
     } else {
@@ -59,7 +73,8 @@ const SuperAdminUserManagement: React.FC<SuperAdminUserManagementProps> = ({ use
         role,
         orgId,
         initials,
-        status: 'Active'
+        status: 'Active',
+        allowedYearGroups: userScope
       };
       onUpdateUsers([...users, newUser]);
       showFeedback(`User ${name} created successfully.`);
@@ -115,12 +130,20 @@ const SuperAdminUserManagement: React.FC<SuperAdminUserManagementProps> = ({ use
 
   const openModal = (user?: UserProfile) => {
     setEditingUser(user || null);
+    setSelectedYearGroups(user?.allowedYearGroups || []);
+    setSelectedRole(user?.role || 'Teacher');
     setIsModalOpen(true);
   };
 
   const closeModal = () => {
     setEditingUser(null);
     setIsModalOpen(false);
+  };
+
+  const toggleYearGroup = (year: string) => {
+      setSelectedYearGroups(prev => 
+          prev.includes(year) ? prev.filter(y => y !== year) : [...prev, year]
+      );
   };
 
   return (
@@ -205,7 +228,7 @@ const SuperAdminUserManagement: React.FC<SuperAdminUserManagementProps> = ({ use
                </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-6 mb-8">
+            <div className="grid grid-cols-2 gap-6 mb-6">
                 <div className="p-4 bg-slate-50 rounded-lg border border-slate-100">
                     <p className="text-xs font-bold text-slate-400 uppercase mb-1">Contact Email</p>
                     <p className="text-sm font-medium text-slate-700 flex items-center">
@@ -221,6 +244,21 @@ const SuperAdminUserManagement: React.FC<SuperAdminUserManagementProps> = ({ use
                     </p>
                 </div>
             </div>
+
+            {selectedUser.allowedYearGroups && selectedUser.allowedYearGroups.length > 0 && (
+                <div className="mb-8 p-4 bg-indigo-50 border border-indigo-100 rounded-lg">
+                    <p className="text-xs font-bold text-indigo-400 uppercase mb-2 flex items-center">
+                        <Layers size={12} className="mr-1" /> Access Scope
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                        {selectedUser.allowedYearGroups.map(year => (
+                            <span key={year} className="px-2 py-1 bg-white text-indigo-600 border border-indigo-200 rounded text-xs font-bold">
+                                Year {year}
+                            </span>
+                        ))}
+                    </div>
+                </div>
+            )}
 
             <h3 className="text-sm font-bold text-slate-800 uppercase mb-3 border-b border-slate-100 pb-2">Security Actions</h3>
             <div className="grid grid-cols-2 gap-4">
@@ -261,14 +299,14 @@ const SuperAdminUserManagement: React.FC<SuperAdminUserManagementProps> = ({ use
       {/* Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-           <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 animate-slide-up">
-              <div className="flex justify-between items-center mb-6">
+           <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 animate-slide-up flex flex-col max-h-[90vh] overflow-hidden">
+              <div className="flex justify-between items-center mb-6 flex-shrink-0">
                   <h3 className="text-lg font-bold text-slate-800">
                       {editingUser ? 'Edit User Profile' : 'Create New User'}
                   </h3>
                   <button onClick={closeModal} className="text-slate-400 hover:text-slate-600"><X size={20}/></button>
               </div>
-              <form onSubmit={handleSaveUser} className="space-y-4">
+              <form onSubmit={handleSaveUser} className="space-y-4 overflow-y-auto px-1 custom-scrollbar">
                   <div>
                       <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Full Name</label>
                       <input name="name" defaultValue={editingUser?.name} required className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500" />
@@ -280,7 +318,12 @@ const SuperAdminUserManagement: React.FC<SuperAdminUserManagementProps> = ({ use
                   <div className="grid grid-cols-2 gap-4">
                       <div>
                           <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Role</label>
-                          <select name="role" defaultValue={editingUser?.role || 'Teacher'} className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 bg-white">
+                          <select 
+                            name="role" 
+                            value={selectedRole} 
+                            onChange={(e) => setSelectedRole(e.target.value)} 
+                            className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                          >
                               <option value="Teacher">Teacher</option>
                               <option value="Head of Year">Head of Year</option>
                               <option value="DSL">DSL</option>
@@ -293,6 +336,33 @@ const SuperAdminUserManagement: React.FC<SuperAdminUserManagementProps> = ({ use
                           <input name="orgId" defaultValue={editingUser?.orgId} className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500" placeholder="Optional" />
                       </div>
                   </div>
+
+                  {/* Scope Selection for specific roles */}
+                  {(selectedRole === 'Head of Year' || selectedRole === 'Teacher') && (
+                      <div className="pt-2 border-t border-slate-100">
+                          <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Access Scope (Year Groups)</label>
+                          <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto">
+                              {availableYears.map(year => (
+                                  <button
+                                    key={year}
+                                    type="button"
+                                    onClick={() => toggleYearGroup(year)}
+                                    className={`px-3 py-1.5 text-xs font-bold rounded-lg border transition-all ${
+                                        selectedYearGroups.includes(year) 
+                                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' 
+                                        : 'bg-white text-slate-500 border-slate-200 hover:border-indigo-300'
+                                    }`}
+                                  >
+                                      Year {year}
+                                  </button>
+                              ))}
+                          </div>
+                          <p className="text-[10px] text-slate-400 mt-1">
+                              Select which year groups this user can view in Class Manager.
+                          </p>
+                      </div>
+                  )}
+
                   <div className="flex justify-end pt-4">
                       <button type="submit" className="px-6 py-2 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 transition-colors">
                           {editingUser ? 'Save Changes' : 'Create User'}

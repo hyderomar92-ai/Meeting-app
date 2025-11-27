@@ -1,8 +1,8 @@
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { MeetingLog, BehaviourEntry, SafeguardingCase, UserProfile } from '../types';
 import { STUDENTS } from '../data/students';
-import { Users, TrendingUp, AlertTriangle, Shield, Calendar, ChevronRight, Star, AlertCircle, Grid, PieChart as PieChartIcon } from 'lucide-react';
+import { Users, TrendingUp, AlertTriangle, Shield, Calendar, ChevronRight, Star, AlertCircle, Grid, PieChart as PieChartIcon, Lock } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
 interface ClassOverviewProps {
@@ -24,11 +24,33 @@ const RISK_COLORS = {
 const ClassOverview: React.FC<ClassOverviewProps> = ({ logs, behaviourEntries, safeguardingCases, onNavigateToStudent, currentUser }) => {
   const [selectedClass, setSelectedClass] = useState<string>('');
 
-  // Extract unique classes
+  // Extract unique classes with RBAC
   const classes = useMemo(() => {
-    const unique = new Set(STUDENTS.map(s => s.studentClass).filter(Boolean));
-    return Array.from(unique).sort();
-  }, []);
+    let allClassOptions = Array.from(new Set(STUDENTS.map(s => s.studentClass).filter(Boolean))).sort();
+    
+    // Global Roles see everything
+    if (['DSL', 'Admin', 'Super Admin'].includes(currentUser.role)) {
+        return allClassOptions;
+    }
+
+    // Restricted Roles check allowedYearGroups
+    if (currentUser.allowedYearGroups && currentUser.allowedYearGroups.length > 0) {
+        return allClassOptions.filter(cls => 
+            // Check if class (e.g. '07B') starts with any allowed year (e.g. '07')
+            currentUser.allowedYearGroups?.some(year => cls?.startsWith(year))
+        );
+    }
+
+    // Default fallback (if role is restricted but no groups assigned, show nothing or maybe all? Safe to show nothing)
+    return []; 
+  }, [currentUser]);
+
+  // Auto-select first available class if current selection is invalid or empty
+  useEffect(() => {
+      if (classes.length > 0 && (!selectedClass || !classes.includes(selectedClass))) {
+          setSelectedClass(classes[0] || '');
+      }
+  }, [classes]);
 
   // Derived Data for Selected Class
   const classData = useMemo(() => {
@@ -128,15 +150,30 @@ const ClassOverview: React.FC<ClassOverviewProps> = ({ logs, behaviourEntries, s
                 <select 
                     value={selectedClass}
                     onChange={(e) => setSelectedClass(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-300 rounded-xl shadow-sm focus:ring-2 focus:ring-indigo-500 outline-none text-sm font-bold text-slate-700 cursor-pointer"
+                    disabled={classes.length === 0}
+                    className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-300 rounded-xl shadow-sm focus:ring-2 focus:ring-indigo-500 outline-none text-sm font-bold text-slate-700 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                    <option value="">Select a Class...</option>
+                    {classes.length === 0 ? (
+                        <option value="">No Access Assigned</option>
+                    ) : (
+                        <option value="">Select a Class...</option>
+                    )}
                     {classes.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
             </div>
         </header>
 
-        {!selectedClass || !classData ? (
+        {classes.length === 0 ? (
+             <div className="flex flex-col items-center justify-center h-96 bg-slate-50 rounded-xl border border-slate-200 border-dashed">
+                <div className="p-4 bg-white rounded-full shadow-sm mb-4">
+                    <Lock size={32} className="text-slate-400" />
+                </div>
+                <h3 className="text-lg font-bold text-slate-700">Access Restricted</h3>
+                <p className="text-slate-500 text-center max-w-md mt-2">
+                    You do not have any Year Groups assigned to your profile. Please contact an Administrator to configure your access scope.
+                </p>
+            </div>
+        ) : !selectedClass || !classData ? (
             <div className="flex flex-col items-center justify-center h-96 bg-slate-50 rounded-xl border border-slate-200 border-dashed">
                 <div className="p-4 bg-white rounded-full shadow-sm mb-4">
                     <Users size={32} className="text-indigo-400" />
