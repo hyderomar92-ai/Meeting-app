@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo } from 'react';
-import { MeetingLog, BehaviourEntry, SafeguardingCase } from '../types';
+import { MeetingLog, BehaviourEntry, SafeguardingCase, UserProfile } from '../types';
 import { generateCertificateContent, CertificateResponse } from '../services/geminiService';
 import { useLanguage } from '../contexts/LanguageContext';
 import { ArrowLeft, Mail, Phone, Clock, GraduationCap, ClipboardList, CheckCircle2, Circle, Plus, User, Users, Flag, Star, AlertCircle, Shield, ChevronRight, TrendingUp, Sparkles, Loader2, Award, Printer, X } from 'lucide-react';
@@ -17,6 +17,7 @@ interface StudentProfileProps {
   onMarkAllCompleted: (studentName: string) => void;
   onQuickLog: (studentName: string) => void;
   onViewSafeguarding: (studentName: string) => void;
+  currentUser: UserProfile;
 }
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d'];
@@ -30,13 +31,16 @@ const StudentProfile: React.FC<StudentProfileProps> = ({
   onToggleActionItem, 
   onMarkAllCompleted, 
   onQuickLog,
-  onViewSafeguarding
+  onViewSafeguarding,
+  currentUser
 }) => {
   const { language } = useLanguage();
   const studentDetails = STUDENTS.find(s => s.name === studentName);
   const studentLogs = logs.filter(l => l.attendees.includes(studentName)).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   const studentBehaviour = behaviourEntries.filter(b => b.studentName === studentName).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   
+  const isTeacher = currentUser.role === 'Teacher';
+
   // Certificate State
   const [showCertificateModal, setShowCertificateModal] = useState(false);
   const [isGeneratingCert, setIsGeneratingCert] = useState(false);
@@ -148,12 +152,14 @@ const StudentProfile: React.FC<StudentProfileProps> = ({
                      <p className="text-sm">{activeSafeguarding.length} open case(s) on file. {criticalSafeguarding.length > 0 && <span className="font-bold underline">CRITICAL RISK DETECTED.</span>}</p>
                  </div>
              </div>
-             <button 
-               onClick={() => onViewSafeguarding(studentName)}
-               className="px-4 py-2 bg-white border border-slate-200 rounded-lg shadow-sm text-sm font-bold hover:bg-slate-50 transition-colors flex items-center"
-             >
-                View Case File <ChevronRight size={16} className="ml-1" />
-             </button>
+             {!isTeacher && (
+               <button 
+                 onClick={() => onViewSafeguarding(studentName)}
+                 className="px-4 py-2 bg-white border border-slate-200 rounded-lg shadow-sm text-sm font-bold hover:bg-slate-50 transition-colors flex items-center"
+               >
+                  View Case File <ChevronRight size={16} className="ml-1" />
+               </button>
+             )}
          </div>
       )}
 

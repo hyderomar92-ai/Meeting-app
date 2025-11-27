@@ -1,19 +1,25 @@
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { MeetingLog } from '../types';
+import { MeetingLog, UserProfile } from '../types';
 import { Search, Filter, Calendar, User, X, CalendarDays, Activity, GraduationCap, CheckCircle2, Circle } from 'lucide-react';
 import { STUDENTS } from '../data/students';
 
 interface HistoryViewProps {
   logs: MeetingLog[];
   onSelectStudent: (name: string) => void;
+  currentUser: UserProfile;
 }
 
-const HistoryView: React.FC<HistoryViewProps> = ({ logs, onSelectStudent }) => {
+const HistoryView: React.FC<HistoryViewProps> = ({ logs, onSelectStudent, currentUser }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<string>('All');
   const [sentimentFilter, setSentimentFilter] = useState<string>('All');
-  const [authorFilter, setAuthorFilter] = useState<string>('All');
+  
+  // Auto-select current user as author filter if they are a teacher, to reduce noise
+  const [authorFilter, setAuthorFilter] = useState<string>(
+      currentUser.role === 'Teacher' ? currentUser.name : 'All'
+  );
+  
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [showSuggestions, setShowSuggestions] = useState(false);

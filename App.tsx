@@ -25,7 +25,7 @@ import SuperAdminResources from './components/SuperAdminResources';
 import SuperAdminBranding from './components/SuperAdminBranding';
 import SuperAdminFeedback from './components/SuperAdminFeedback';
 import OrgAdminSettings from './components/OrgAdminSettings';
-import { LayoutDashboard, PlusCircle, Users, Menu, X, Shield, FileText, BookUser, FileBarChart, LogOut, Star, LayoutGrid, Globe, Building2, Settings, BrainCircuit, ShieldAlert, Sliders, Eye, LifeBuoy, CreditCard, Network, Database, Library, Palette, MessageSquare, Activity, Monitor, Ticket, Wifi, CheckCircle2, AlertCircle } from 'lucide-react';
+import { LayoutDashboard, PlusCircle, Users, Menu, X, Shield, FileText, BookUser, FileBarChart, LogOut, Star, LayoutGrid, Globe, Building2, Settings, BrainCircuit, ShieldAlert, Sliders, Eye, LifeBuoy, CreditCard, Network, Database, Library, Palette, MessageSquare, Activity, Monitor, Ticket, Wifi, CheckCircle2, AlertCircle, Lock } from 'lucide-react';
 import { STUDENTS } from './data/students';
 import { useLanguage, Language } from './contexts/LanguageContext';
 
@@ -151,10 +151,65 @@ const INITIAL_USERS: UserProfile[] = [
     { id: 'u4', name: 'Emily Blunt', role: 'Admin', initials: 'EB', email: 'admin@springfield.edu', status: 'Active', orgId: 'org-1' },
 ];
 
+// --- RBAC CONFIG ---
+const PERMISSIONS: Record<UserRole, ViewState[]> = {
+    'Super Admin': [
+        'SUPER_ADMIN_DASHBOARD', 'SUPER_ADMIN_TENANTS', 'SUPER_ADMIN_AI', 'SUPER_ADMIN_SECURITY',
+        'SUPER_ADMIN_TOOLS', 'SUPER_ADMIN_OPS', 'SUPER_ADMIN_SUBSCRIPTIONS', 'SUPER_ADMIN_INTEGRATIONS',
+        'SUPER_ADMIN_DATA', 'SUPER_ADMIN_RESOURCES', 'SUPER_ADMIN_BRANDING', 'SUPER_ADMIN_FEEDBACK',
+        'DASHBOARD' // Can view dashboard when impersonating
+    ],
+    'Admin': [
+        'DASHBOARD', 'NEW_LOG', 'HISTORY', 'STUDENT_PROFILE', 'STUDENTS_DIRECTORY', 
+        'REPORTS', 'BEHAVIOUR', 'SEATING_PLAN', 'ORG_SETTINGS',
+        'IT_DASHBOARD', 'IT_USERS', 'IT_ASSETS', 'IT_DATA', 'IT_HELPDESK'
+    ],
+    'DSL': [
+        'DASHBOARD', 'NEW_LOG', 'HISTORY', 'STUDENT_PROFILE', 'STUDENTS_DIRECTORY', 
+        'SAFEGUARDING', 'REPORTS', 'BEHAVIOUR', 'SEATING_PLAN'
+    ],
+    'Head of Year': [
+        'DASHBOARD', 'NEW_LOG', 'HISTORY', 'STUDENT_PROFILE', 'STUDENTS_DIRECTORY', 
+        'SAFEGUARDING', 'REPORTS', 'BEHAVIOUR', 'SEATING_PLAN'
+    ],
+    'Teacher': [
+        'DASHBOARD', 'NEW_LOG', 'HISTORY', 'STUDENT_PROFILE', 'STUDENTS_DIRECTORY', 
+        'REPORTS', 'BEHAVIOUR', 'SEATING_PLAN', 'SAFEGUARDING' // Access allowed for Reporting Only (Internal logic handles restrictions)
+    ]
+};
+
+const AccessDenied: React.FC<{ onHome: () => void }> = ({ onHome }) => (
+    <div className="flex flex-col items-center justify-center h-full text-center animate-fade-in">
+        <div className="bg-red-50 p-6 rounded-full mb-6">
+            <Lock size={64} className="text-red-500" />
+        </div>
+        <h2 className="text-3xl font-bold text-slate-800 mb-2">Access Denied</h2>
+        <p className="text-slate-500 max-w-md mb-8">
+            You do not have permission to view this area. If you believe this is an error, please contact your IT Administrator.
+        </p>
+        <button 
+            onClick={onHome}
+            className="px-6 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-colors"
+        >
+            Return to Dashboard
+        </button>
+    </div>
+);
+
 export default function App() {
   // --- STATE ---
-  const [user, setUser] = useState<UserProfile | null>(null);
-  const [view, setView] = useState<ViewState>('DASHBOARD');
+  // Initialize user from local storage for session persistence
+  const [user, setUser] = useState<UserProfile | null>(() => {
+      const savedUser = localStorage.getItem('sentinel_current_user');
+      return savedUser ? JSON.parse(savedUser) : null;
+  });
+
+  const [view, setView] = useState<ViewState>(() => {
+      // Restore previous view if available and user is logged in
+      const savedView = localStorage.getItem('sentinel_last_view');
+      return (savedView && user) ? (savedView as ViewState) : 'DASHBOARD';
+  });
+
   const [selectedStudent, setSelectedStudent] = useState<string | undefined>(undefined);
   
   // Data State with Persistence
@@ -174,12 +229,35 @@ export default function App() {
       const saved = localStorage.getItem('sentinel_organizations');
       return saved ? JSON.parse(saved) : MOCK_ORGANIZATIONS;
   });
+  
+  // Fix: Ensure safety check on users loading
   const [allUsers, setAllUsers] = useState<UserProfile[]>(() => {
-      const saved = localStorage.getItem('sentinel_users');
-      return saved ? JSON.parse(saved) : INITIAL_USERS;
+      try {
+          const saved = localStorage.getItem('sentinel_users');
+          const parsed = saved ? JSON.parse(saved) : null;
+          // Ensure parsed is an array, otherwise fallback to defaults
+          return Array.isArray(parsed) ? parsed : INITIAL_USERS;
+      } catch (e) {
+          console.error("Failed to load users from storage", e);
+          return INITIAL_USERS;
+      }
   });
 
   // Persistence Effects
+  useEffect(() => { 
+      if (user) {
+          localStorage.setItem('sentinel_current_user', JSON.stringify(user));
+      } else {
+          localStorage.removeItem('sentinel_current_user');
+      }
+  }, [user]);
+
+  useEffect(() => {
+      if (user) {
+          localStorage.setItem('sentinel_last_view', view);
+      }
+  }, [view, user]);
+
   useEffect(() => { localStorage.setItem('sentinel_logs', JSON.stringify(logs)); }, [logs]);
   useEffect(() => { localStorage.setItem('sentinel_safeguarding', JSON.stringify(safeguardingCases)); }, [safeguardingCases]);
   useEffect(() => { localStorage.setItem('sentinel_behaviour', JSON.stringify(behaviourEntries)); }, [behaviourEntries]);
@@ -227,6 +305,8 @@ export default function App() {
 
   const handleLogout = () => {
     setUser(null);
+    localStorage.removeItem('sentinel_current_user');
+    localStorage.removeItem('sentinel_last_view');
     setView('DASHBOARD');
     setSelectedStudent(undefined);
     setEscalationData(null);
@@ -234,9 +314,8 @@ export default function App() {
 
   const handleNavigate = (newView: ViewState, studentName?: string) => {
     setView(newView);
-    if (studentName) {
-        setSelectedStudent(studentName);
-    }
+    setSelectedStudent(studentName); // Clear if undefined to prevent stale state
+    
     // If navigating away from Safeguarding, clear any pending escalation data so it doesn't reappear
     if (newView !== 'SAFEGUARDING') {
        setEscalationData(null);
@@ -331,6 +410,18 @@ export default function App() {
   const renderContent = () => {
     if (!user) return null;
 
+    // Role-Based Access Check
+    const allowedViews = PERMISSIONS[user.role] || [];
+    
+    // Special case: Dashboard is usually allowed, but super admin main dashboard is different
+    // We check if the view is in the allowed list OR if specific cross-role views apply
+    const hasAccess = allowedViews.includes(view) || 
+        (user.role === 'Super Admin' && view === 'DASHBOARD'); // Allow impersonated dashboard
+
+    if (!hasAccess) {
+        return <AccessDenied onHome={() => handleNavigate(user.role === 'Super Admin' ? 'SUPER_ADMIN_DASHBOARD' : 'DASHBOARD')} />;
+    }
+
     switch (view) {
       case 'DASHBOARD':
         return <Dashboard logs={logs} safeguardingCases={safeguardingCases} behaviourEntries={behaviourEntries} onNavigate={handleNavigate} currentUser={user} />;
@@ -348,7 +439,7 @@ export default function App() {
             />
         );
       case 'HISTORY':
-        return <HistoryView logs={logs} onSelectStudent={(name) => handleNavigate('STUDENT_PROFILE', name)} />;
+        return <HistoryView logs={logs} onSelectStudent={(name) => handleNavigate('STUDENT_PROFILE', name)} currentUser={user} />;
       case 'STUDENT_PROFILE':
         return selectedStudent ? (
           <StudentProfile 
@@ -361,6 +452,7 @@ export default function App() {
             onMarkAllCompleted={handleMarkAllActionsCompleted}
             onQuickLog={(name) => handleNavigate('NEW_LOG', name)}
             onViewSafeguarding={(name) => handleNavigate('SAFEGUARDING', name)}
+            currentUser={user}
           />
         ) : <StudentDirectory onSelectStudent={(name) => handleNavigate('STUDENT_PROFILE', name)} onQuickLog={(name) => handleNavigate('NEW_LOG', name)} safeguardingCases={safeguardingCases} />;
       case 'STUDENTS_DIRECTORY':
@@ -424,7 +516,8 @@ export default function App() {
   };
 
   const isSuperAdmin = user?.role === 'Super Admin';
-  const isITAdmin = user?.role === 'Admin';
+  const isAdmin = ['Admin', 'Super Admin'].includes(user?.role || '');
+  const isLeader = ['Head of Year', 'DSL', 'Admin', 'Super Admin'].includes(user?.role || '');
 
   if (!user) {
     return <LoginView onLogin={handleLogin} users={allUsers} onUpdateUsers={setAllUsers} />;
@@ -468,9 +561,17 @@ export default function App() {
                         <NavItem icon={<Star size={20} />} label={t('nav.behaviour')} active={view === 'BEHAVIOUR'} onClick={() => handleNavigate('BEHAVIOUR')} />
                         <NavItem icon={<LayoutGrid size={20} />} label={t('nav.seating')} active={view === 'SEATING_PLAN'} onClick={() => handleNavigate('SEATING_PLAN')} />
                         <NavItem icon={<FileText size={20} />} label={t('nav.reports')} active={view === 'REPORTS'} onClick={() => handleNavigate('REPORTS')} />
-                        <NavItem icon={<ShieldAlert size={20} />} label={t('nav.safeguarding')} active={view === 'SAFEGUARDING'} onClick={() => handleNavigate('SAFEGUARDING')} alert={hasCriticalRisks} />
                         
-                        {isITAdmin && (
+                        {/* Safeguarding Link: Dynamic Label based on Role */}
+                        <NavItem 
+                            icon={<ShieldAlert size={20} />} 
+                            label={isLeader ? t('nav.safeguarding') : 'Report Concern'} 
+                            active={view === 'SAFEGUARDING'} 
+                            onClick={() => handleNavigate('SAFEGUARDING')} 
+                            alert={isLeader && hasCriticalRisks} 
+                        />
+                        
+                        {isAdmin && (
                             <>
                                 <p className="px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider mt-6 mb-2">IT Admin</p>
                                 <NavItem icon={<Activity size={20} />} label="Overview" active={view === 'IT_DASHBOARD'} onClick={() => handleNavigate('IT_DASHBOARD')} />

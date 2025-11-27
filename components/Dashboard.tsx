@@ -191,7 +191,7 @@ const Dashboard: React.FC<DashboardProps> = ({ logs, safeguardingCases, behaviou
                         className={`px-5 py-2.5 rounded-lg font-bold text-sm shadow-lg transition-all flex items-center ${
                             isScanning 
                             ? 'bg-indigo-900 text-indigo-300 cursor-not-allowed' 
-                            : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-900/50'
+                            : 'bg-indigo-600 hover:bg-indigo-50 text-white shadow-indigo-900/50'
                         }`}
                     >
                         {isScanning ? <Loader2 size={16} className="animate-spin mr-2" /> : <Activity size={16} className="mr-2" />}
@@ -298,29 +298,6 @@ const Dashboard: React.FC<DashboardProps> = ({ logs, safeguardingCases, behaviou
                     </div>
                 ))}
             </div>
-        </div>
-      )}
-
-      {/* Standard Action Required Banner (Non-Leaders or general notification) */}
-      {!isLeader && activeHighRiskCount > 0 && (
-        <div 
-          onClick={() => onNavigate('SAFEGUARDING')}
-          className="bg-red-50 border border-red-200 rounded-xl p-4 flex flex-col sm:flex-row items-center justify-between cursor-pointer hover:bg-red-100 transition-colors animate-pulse-subtle shadow-sm mb-8"
-        >
-          <div className="flex items-center space-x-4 mb-3 sm:mb-0">
-             <div className="p-3 bg-red-100 text-red-600 rounded-full shadow-sm ring-2 ring-red-200">
-               <Shield size={24} />
-             </div>
-             <div>
-               <h3 className="text-red-900 font-bold text-lg">Action Required</h3>
-               <p className="text-red-700 text-sm font-medium">
-                   {activeHighRiskCount} High/Critical risk safeguarding case{activeHighRiskCount !== 1 ? 's' : ''} active.
-               </p>
-             </div>
-          </div>
-          <div className="flex items-center text-red-700 font-bold text-sm bg-white/50 px-4 py-2 rounded-lg hover:bg-white transition-colors">
-             Review Cases <ChevronRight size={16} className="ml-1" />
-          </div>
         </div>
       )}
 

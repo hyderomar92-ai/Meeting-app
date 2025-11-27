@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { UserProfile } from '../types';
-import { User, Shield, Briefcase, Plus, X, Save, Settings, Trash2, Edit2, Key } from 'lucide-react';
+import { User, Shield, Briefcase, Plus, X, Save, Settings, Trash2, Edit2, Key, RefreshCw } from 'lucide-react';
 
 interface LoginViewProps {
   onLogin: (user: UserProfile) => void;
@@ -67,6 +67,13 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin, users, onUpdateUsers }) 
     }
   };
 
+  const handleResetSystem = () => {
+      if(window.confirm("WARNING: This will delete all created logs, safeguarding cases, and custom data from this browser. The page will reload. Continue?")) {
+          localStorage.clear();
+          window.location.reload();
+      }
+  };
+
   const resetForm = () => {
     setMode('SELECT');
     setUserName('');
@@ -83,8 +90,12 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin, users, onUpdateUsers }) 
       }
   };
 
+  // Safe access to users array
+  const userList = Array.isArray(users) ? users : [];
+
   return (
-    <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-4">
+    <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-4 relative">
+      
       <div className="mb-8 text-center animate-fade-in">
         <div className="inline-flex items-center justify-center p-5 bg-indigo-600 rounded-2xl shadow-lg shadow-indigo-900/50 mb-5">
           <Shield size={48} className="text-white" />
@@ -136,22 +147,20 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin, users, onUpdateUsers }) 
         {/* LIST VIEW (SELECT & MANAGE) */}
         {(mode === 'SELECT' || mode === 'MANAGE') && (
             <div className="space-y-3 max-h-[350px] overflow-y-auto pr-1 custom-scrollbar">
-              {users.length === 0 && (
+              {userList.length === 0 && (
                   <div className="text-center py-8 text-slate-400">
                       <User size={32} className="mx-auto mb-2 opacity-20" />
                       <p className="text-sm">No profiles found.</p>
                       <button onClick={() => setMode('ADD')} className="mt-2 text-indigo-600 text-sm font-medium hover:underline">Create First User</button>
                   </div>
               )}
-              {users.map((user) => (
+              {userList.map((user) => (
                 <div
                   key={user.id}
-                  onClick={() => mode === 'SELECT' && user.status !== 'Locked' && onLogin(user)}
+                  onClick={() => mode === 'SELECT' && onLogin(user)}
                   className={`w-full flex items-center p-3 rounded-xl border transition-all group relative ${
                       mode === 'SELECT' 
-                        ? user.status === 'Locked' 
-                            ? 'bg-slate-50 border-slate-100 opacity-60 cursor-not-allowed'
-                            : 'hover:bg-slate-50 border-transparent hover:border-indigo-200 cursor-pointer' 
+                        ? 'hover:bg-slate-50 border-transparent hover:border-indigo-200 cursor-pointer' 
                         : 'bg-white border-slate-100'
                   }`}
                 >
@@ -164,10 +173,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin, users, onUpdateUsers }) 
                     {user.initials}
                   </div>
                   <div className="text-left flex-1 min-w-0">
-                    <p className="text-slate-800 font-medium group-hover:text-indigo-700 truncate flex items-center">
-                        {user.name}
-                        {user.status === 'Locked' && <span className="ml-2 text-[10px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded uppercase font-bold">Locked</span>}
-                    </p>
+                    <p className="text-slate-800 font-medium group-hover:text-indigo-700 truncate">{user.name}</p>
                     <div className="flex items-center text-xs text-slate-500">
                       {renderRoleIcon(user.role)}
                       {user.role}
@@ -224,7 +230,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin, users, onUpdateUsers }) 
                   <option value="Head of Year">Head of Year</option>
                   <option value="DSL">DSL (Safeguarding Lead)</option>
                   <option value="Admin">Admin</option>
-                  <option value="Super Admin">App Owner</option>
+                  <option value="Super Admin">Super Admin (System Owner)</option>
                 </select>
               </div>
 
@@ -256,6 +262,15 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin, users, onUpdateUsers }) 
             </div>
         )}
       </div>
+
+      {/* Hard Reset Button */}
+      <button 
+        onClick={handleResetSystem}
+        className="fixed bottom-4 right-4 text-xs text-slate-600 hover:text-red-500 flex items-center opacity-50 hover:opacity-100 transition-opacity"
+        title="Reset all local data"
+      >
+        <RefreshCw size={12} className="mr-1" /> Reset System
+      </button>
     </div>
   );
 };

@@ -1,7 +1,9 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+
+import * as React from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { SafeguardingCase, MeetingLog, UserProfile } from '../types';
 import { generateSafeguardingReport } from '../services/geminiService';
-import { Shield, AlertTriangle, FileText, Save, Loader2, Search, User, ChevronRight, ClipboardList, Gavel, Clock, Plus, Calendar, ArrowLeft, Filter, CheckCircle2, AlertCircle, Activity, Trash2, Tag, BarChart3, Paperclip, CheckSquare, Square, Sparkles, BrainCircuit, X, Lock, Eye, EyeOff, Copy, ChevronDown, Edit3, History } from 'lucide-react';
+import { Shield, AlertTriangle, FileText, Save, Loader2, Search, User, ChevronRight, ClipboardList, Gavel, Clock, Plus, Calendar, ArrowLeft, Filter, CheckCircle2, Activity, Trash2, Tag, BarChart3, Paperclip, CheckSquare, Square, Sparkles, BrainCircuit, Lock, Eye, EyeOff, Copy, ChevronDown, Edit3, History, Circle } from 'lucide-react';
 import { STUDENTS } from '../data/students';
 
 interface SafeguardingBuilderProps {
@@ -26,7 +28,10 @@ const generateMockAccessLogs = (caseId: string, creator: string) => {
 };
 
 const SafeguardingBuilder: React.FC<SafeguardingBuilderProps> = ({ cases, logs, onSave, onUpdate, onDelete, onCancel, currentUser, initialSearchTerm = '', initialData }) => {
-  const [mode, setMode] = useState<'LIST' | 'BUILD'>('LIST');
+  // RBAC: Teachers forced to BUILD mode, cannot see LIST
+  const isTeacher = currentUser.role === 'Teacher';
+  
+  const [mode, setMode] = useState<'LIST' | 'BUILD'>(isTeacher ? 'BUILD' : 'LIST');
   const [selectedCase, setSelectedCase] = useState<SafeguardingCase | null>(null);
   const [caseSearchTerm, setCaseSearchTerm] = useState(initialSearchTerm);
   const [statusFilter, setStatusFilter] = useState<string>('All');
@@ -142,13 +147,6 @@ const SafeguardingBuilder: React.FC<SafeguardingBuilderProps> = ({ cases, logs, 
   const investigatingCases = cases.filter(c => c.status === 'Investigating').length;
   const highRiskCases = cases.filter(c => ['High', 'Critical'].includes(c.generatedReport.riskLevel)).length;
 
-  // Helper to calculate numerical score
-  const calculateRiskScore = (risk: string, sentiment: string) => {
-    const riskWeights: Record<string, number> = { 'Critical': 60, 'High': 40, 'Medium': 20, 'Low': 10 };
-    const sentimentWeights: Record<string, number> = { 'Critical': 40, 'Serious': 30, 'Cautionary': 15, 'Routine': 0 };
-    return Math.min((riskWeights[risk] || 0) + (sentimentWeights[sentiment] || 0), 100);
-  };
-
   // Redaction helper function
   const redactText = (text: string, subjectName: string) => {
     if (!isRedacted) return text;
@@ -232,9 +230,18 @@ const SafeguardingBuilder: React.FC<SafeguardingBuilderProps> = ({ cases, logs, 
   };
 
   const handleFinalSave = () => {
-    if (!generatedCase) return;
+    // Create report structure even if AI wasn't used (manual entry fallback)
+    const reportData = generatedCase || {
+        dslSummary: description.substring(0, 100) + "...",
+        chronology: [new Date().toISOString() + ": Incident recorded manually"],
+        keyEvidence: [],
+        policiesApplied: ["Standard Reporting"],
+        witnessQuestions: [],
+        nextSteps: ["Review by DSL"],
+        riskLevel: 'Low',
+        sentiment: 'Routine'
+    };
     
-    // Preserve resolution notes if editing
     const existingCase = editingId ? cases.find(c => c.id === editingId) : null;
     
     const newCase: SafeguardingCase = {
@@ -243,7 +250,7 @@ const SafeguardingBuilder: React.FC<SafeguardingBuilderProps> = ({ cases, logs, 
       date,
       incidentType,
       rawDescription: description,
-      generatedReport: generatedCase,
+      generatedReport: reportData as any,
       status: status,
       relatedLogIds: selectedLogIds,
       createdBy: existingCase?.createdBy || currentUser.name,
@@ -259,22 +266,23 @@ const SafeguardingBuilder: React.FC<SafeguardingBuilderProps> = ({ cases, logs, 
         onSave(newCase);
     }
 
-    setMode('LIST'); 
+    // Reset form
     setStudentName('');
     setDescription('');
     setSelectedLogIds([]);
     setGeneratedCase(null);
     setIsConfidential(false);
     setEditingId(null);
+
+    if (!isTeacher) {
+        setMode('LIST'); 
+    } else {
+        alert("Safeguarding Report Submitted Successfully.");
+        onCancel();
+    }
   };
   
   // Interactive Update Handlers (Detail View)
-  const updateCaseStatus = (c: SafeguardingCase, newStatus: SafeguardingCase['status']) => {
-      const updated = { ...c, status: newStatus, updatedAt: new Date().toISOString() };
-      setSelectedCase(updated);
-      onUpdate(updated);
-  };
-
   const toggleActionStep = (c: SafeguardingCase, step: string) => {
       const currentCompleted = c.completedSteps || [];
       const newCompleted = currentCompleted.includes(step) 
@@ -287,7 +295,6 @@ const SafeguardingBuilder: React.FC<SafeguardingBuilderProps> = ({ cases, logs, 
   };
 
   const handleResolutionNotesChange = (c: SafeguardingCase, notes: string) => {
-      // Just update local state for interactivity, persist on blur
       setSelectedCase({ ...c, resolutionNotes: notes });
   };
 
@@ -299,8 +306,8 @@ const SafeguardingBuilder: React.FC<SafeguardingBuilderProps> = ({ cases, logs, 
       setTimeout(() => setNoteSaveStatus('IDLE'), 2500);
   };
 
-  // LIST MODE: Review existing cases
-  if (mode === 'LIST' && !selectedCase) {
+  // LIST MODE
+  if (mode === 'LIST' && !selectedCase && !isTeacher) {
       return (
           <div className="animate-fade-in space-y-6 relative">
                {/* Delete Confirmation Modal */}
@@ -474,13 +481,8 @@ const SafeguardingBuilder: React.FC<SafeguardingBuilderProps> = ({ cases, logs, 
       );
   }
 
-  // DETAIL MODE: Review a specific case
-  if (selectedCase) {
-      const score = calculateRiskScore(selectedCase.generatedReport.riskLevel, selectedCase.generatedReport.sentiment);
-      const completionPercentage = selectedCase.generatedReport.nextSteps.length > 0 
-          ? Math.round(((selectedCase.completedSteps?.length || 0) / selectedCase.generatedReport.nextSteps.length) * 100)
-          : 0;
-      
+  // DETAIL MODE
+  if (selectedCase && !isTeacher) {
       // Mock Access logs for the UI
       const accessLogs = generateMockAccessLogs(selectedCase.id, selectedCase.createdBy || 'Admin');
 
@@ -531,431 +533,217 @@ const SafeguardingBuilder: React.FC<SafeguardingBuilderProps> = ({ cases, logs, 
                   </div>
               </div>
               
-              <div className="p-8 space-y-8 overflow-y-auto">
-                  {/* Status Bar */}
-                  <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row justify-between items-center gap-4">
-                      <div className="flex items-center space-x-4 w-full md:w-auto">
-                          <span className="text-sm font-bold text-slate-500 uppercase tracking-wide">Case Status:</span>
-                          <div className="flex bg-slate-100 p-1 rounded-lg">
-                              {['Open', 'Investigating', 'Closed'].map((s) => (
-                                  <button 
-                                      key={s}
-                                      onClick={() => updateCaseStatus(selectedCase, s as any)}
-                                      className={`px-4 py-1.5 text-xs font-bold rounded-md transition-all ${selectedCase.status === s 
-                                          ? (s === 'Open' ? 'bg-red-500 text-white shadow' : s === 'Investigating' ? 'bg-orange-500 text-white shadow' : 'bg-green-600 text-white shadow') 
-                                          : 'text-slate-500 hover:text-slate-800'
-                                      }`}
-                                  >
-                                      {s}
-                                  </button>
-                              ))}
+              <div className="p-8 space-y-8 overflow-y-auto h-[calc(100vh-200px)] custom-scrollbar">
+                  {/* 1. Incident Overview */}
+                  <section>
+                      <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wide mb-3 border-b border-slate-100 pb-2">Incident Overview</h3>
+                      <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
+                          <p className="text-slate-700 whitespace-pre-wrap leading-relaxed">{selectedCase.rawDescription}</p>
+                      </div>
+                  </section>
+
+                  {/* 2. AI Analysis */}
+                  <section className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div>
+                          <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wide mb-3 border-b border-slate-100 pb-2">AI Risk Analysis</h3>
+                          <div className="space-y-4">
+                              <div className="flex items-center justify-between p-3 bg-white border border-slate-200 rounded-lg">
+                                  <span className="text-sm text-slate-600">Risk Level</span>
+                                  <span className={`px-2 py-1 rounded text-xs font-bold uppercase ${selectedCase.generatedReport.riskLevel === 'Critical' ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700'}`}>{selectedCase.generatedReport.riskLevel}</span>
+                              </div>
+                              <div className="flex items-center justify-between p-3 bg-white border border-slate-200 rounded-lg">
+                                  <span className="text-sm text-slate-600">Sentiment</span>
+                                  <span className="text-xs font-bold text-slate-700">{selectedCase.generatedReport.sentiment}</span>
+                              </div>
+                              {selectedCase.generatedReport.evidenceAnalysis && (
+                                  <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg text-sm text-blue-800">
+                                      <p className="font-bold mb-1 flex items-center"><BrainCircuit size={14} className="mr-1"/> Pattern Detected</p>
+                                      {selectedCase.generatedReport.evidenceAnalysis}
+                                  </div>
+                              )}
                           </div>
                       </div>
-                      
-                      <div className="flex items-center space-x-4 w-full md:w-auto">
-                           <div className="text-right">
-                               <p className="text-[10px] font-bold text-slate-400 uppercase">Resolution Progress</p>
-                               <div className="flex items-center justify-end space-x-2">
-                                   <div className="w-32 h-2 bg-slate-100 rounded-full overflow-hidden">
-                                       <div className="h-full bg-emerald-500 transition-all duration-500" style={{ width: `${completionPercentage}%` }}></div>
-                                   </div>
-                                   <span className="text-xs font-bold text-slate-700">{completionPercentage}%</span>
-                               </div>
-                           </div>
-                      </div>
-                  </div>
-
-                  {/* ... Detail Content ... */}
-                  <div className="grid grid-cols-2 gap-6 text-sm border-b border-slate-100 pb-6">
-                      <div><p className="text-slate-400 mb-1 uppercase text-xs font-bold">Incident Date</p><p className="font-medium text-slate-800 text-lg">{selectedCase.date}</p></div>
-                      <div><p className="text-slate-400 mb-1 uppercase text-xs font-bold">Category</p><p className="font-medium text-lg text-slate-800">{selectedCase.incidentType}</p></div>
-                  </div>
-                  
-                  {/* Risk Score */}
-                  <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-                      <div className="flex justify-between items-end mb-3">
-                          <div className="flex items-center text-slate-700">
-                              <BarChart3 size={20} className="mr-2 text-blue-600" />
-                              <h3 className="font-bold">Calculated Risk Score</h3>
-                          </div>
-                          <span className={`text-2xl font-black ${score >= 80 ? 'text-red-600' : score >= 50 ? 'text-orange-500' : 'text-blue-600'}`}>{score}/100</span>
-                      </div>
-                      <div className="w-full bg-slate-100 rounded-full h-4 overflow-hidden">
-                        <div className={`h-full rounded-full transition-all duration-1000 ${score >= 80 ? 'bg-red-600' : score >= 50 ? 'bg-orange-500' : 'bg-blue-500'}`} style={{ width: `${score}%` }}></div>
-                      </div>
-                      <div className="flex justify-between text-xs text-slate-400 mt-2 font-medium"><span>Low Risk</span><span>Medium Risk</span><span>High Risk</span><span>Critical</span></div>
-                  </div>
-
-                  <div>
-                      <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wide mb-3 flex items-center">
-                          <FileText size={16} className="mr-2 text-blue-600" /> DSL Executive Summary
-                      </h3>
-                      <div className="bg-blue-50 p-5 rounded-xl border border-blue-100 text-slate-700 leading-relaxed">
-                        {redactText(selectedCase.generatedReport.dslSummary, selectedCase.studentName)}
-                      </div>
-                  </div>
-                  
-                   <div>
-                      <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wide mb-3 flex items-center">
-                          <FileText size={16} className="mr-2 text-slate-400" /> Raw Incident Report
-                      </h3>
-                      <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 text-slate-600 text-sm italic">
-                        "{redactText(selectedCase.rawDescription, selectedCase.studentName)}"
-                      </div>
-                  </div>
-
-                  {/* Evidence Analysis */}
-                  {selectedCase.generatedReport.evidenceAnalysis && (
-                    <div className="bg-indigo-50 p-5 rounded-xl border border-indigo-100 shadow-sm">
-                        <h3 className="text-sm font-bold text-indigo-800 uppercase tracking-wide mb-3 flex items-center">
-                          <BrainCircuit size={16} className="mr-2" /> AI Pattern Recognition
-                        </h3>
-                        <p className="text-sm text-indigo-900 leading-relaxed">
-                          {redactText(selectedCase.generatedReport.evidenceAnalysis, selectedCase.studentName)}
-                        </p>
-                    </div>
-                  )}
-                  
-                  {/* Evidence Section */}
-                  {(selectedCase.generatedReport.keyEvidence?.length > 0 || (selectedCase.relatedLogIds && selectedCase.relatedLogIds.length > 0)) && (
-                    <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
-                        <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wide mb-4 flex items-center"><Paperclip size={16} className="mr-2 text-slate-500" /> Evidentiary Basis</h3>
-                        {selectedCase.generatedReport.keyEvidence?.length > 0 && (
-                          <div className="mb-4">
-                             <h4 className="text-xs font-bold text-slate-400 uppercase mb-2">Key Findings & Patterns</h4>
-                             <ul className="space-y-2">
-                                {selectedCase.generatedReport.keyEvidence.map((ev, i) => (
-                                    <li key={i} className="flex items-start text-sm text-slate-700 bg-slate-50 p-2 rounded">
-                                        <span className="mr-2 text-blue-500 mt-0.5">•</span> {redactText(ev, selectedCase.studentName)}
-                                    </li>
-                                ))}
-                             </ul>
-                          </div>
-                        )}
-                        {/* Linked Logs */}
-                        {selectedCase.relatedLogIds && selectedCase.relatedLogIds.length > 0 && (
-                            <div>
-                                <h4 className="text-xs font-bold text-slate-400 uppercase mb-2">Corroborating Interaction Logs ({selectedCase.relatedLogIds.length})</h4>
-                                <div className="space-y-2">
-                                    {logs.filter(l => selectedCase.relatedLogIds?.includes(l.id)).map(log => (
-                                        <div key={log.id} className="text-xs p-3 border border-slate-100 rounded-lg flex justify-between items-center bg-white hover:bg-slate-50">
-                                            <div>
-                                                <span className="font-bold text-slate-700">{new Date(log.date).toLocaleDateString()}</span>
-                                                <span className="mx-2 text-slate-300">|</span>
-                                                <span className="text-slate-600">{log.type}</span>
-                                            </div>
-                                            <div className="flex items-center">
-                                                {log.createdBy && <span className="text-[10px] text-slate-400 mr-2">by {log.createdBy}</span>}
-                                                <span className={`px-2 py-0.5 rounded text-[10px] ${log.sentiment === 'Concerned' ? 'bg-red-50 text-red-600' : 'bg-slate-100 text-slate-500'}`}>{log.sentiment}</span>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                  )}
-
-                  <div>
-                      <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wide mb-3 flex items-center"><Clock size={16} className="mr-2 text-slate-400" /> Timeline of Events</h3>
-                      <ul className="space-y-0 border-l-2 border-slate-200 pl-6 ml-2">
-                          {selectedCase.generatedReport.chronology.map((event, i) => (
-                              <li key={i} className="relative pb-6 last:pb-0">
-                                  <span className="absolute -left-[31px] top-1 w-3 h-3 rounded-full bg-white border-2 border-slate-400"></span>
-                                  <p className="text-sm text-slate-700">{redactText(event, selectedCase.studentName)}</p>
-                              </li>
-                          ))}
-                      </ul>
-                  </div>
-                  
-                  {/* Action Plan Checklist */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div className="bg-amber-50 p-5 rounded-xl border border-amber-100">
-                          <h4 className="font-bold text-amber-800 text-sm mb-3 flex items-center"><AlertTriangle size={16} className="mr-2" /> Witness Questions</h4>
+                      <div>
+                          <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wide mb-3 border-b border-slate-100 pb-2">Witness Questions</h3>
                           <ul className="space-y-2">
-                              {selectedCase.generatedReport.witnessQuestions.map((q, i) => (<li key={i} className="flex items-start text-sm text-amber-900"><span className="mr-2">•</span>{redactText(q, selectedCase.studentName)}</li>))}
+                              {selectedCase.generatedReport.witnessQuestions.map((q, i) => (
+                                  <li key={i} className="flex items-start text-sm text-slate-600 bg-white p-2 rounded border border-slate-100">
+                                      <span className="text-indigo-500 font-bold mr-2">Q{i+1}:</span> {q}
+                                  </li>
+                              ))}
                           </ul>
+                      </div>
+                  </section>
+
+                  {/* 3. Action Plan & Status */}
+                  <section>
+                      <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wide mb-3 border-b border-slate-100 pb-2">Action Plan & Resolution</h3>
+                      <div className="space-y-2 mb-6">
+                          {selectedCase.generatedReport.nextSteps.map((step, i) => {
+                              const isCompleted = (selectedCase.completedSteps || []).includes(step);
+                              return (
+                                  <div key={i} onClick={() => toggleActionStep(selectedCase, step)} className={`flex items-center p-3 rounded-lg border cursor-pointer transition-colors ${isCompleted ? 'bg-green-50 border-green-200' : 'bg-white border-slate-200 hover:border-indigo-300'}`}>
+                                      {isCompleted ? <CheckCircle2 className="text-green-600 mr-3" size={20} /> : <Circle className="text-slate-300 mr-3" size={20} />}
+                                      <span className={`text-sm ${isCompleted ? 'text-green-800 font-medium' : 'text-slate-700'}`}>{step}</span>
+                                  </div>
+                              )
+                          })}
                       </div>
                       
-                      <div className="bg-emerald-50 p-5 rounded-xl border border-emerald-100">
-                          <h4 className="font-bold text-emerald-800 text-sm mb-3 flex items-center"><ClipboardList size={16} className="mr-2" /> Action Plan Checklist</h4>
-                           <ul className="space-y-2">
-                              {selectedCase.generatedReport.nextSteps.map((step, i) => {
-                                  const isCompleted = selectedCase.completedSteps?.includes(step);
-                                  return (
-                                    <li 
-                                        key={i} 
-                                        className={`flex items-start text-sm p-2 rounded cursor-pointer transition-colors ${isCompleted ? 'bg-emerald-100/50 text-emerald-800/60 line-through' : 'bg-white hover:bg-emerald-100 text-emerald-900 shadow-sm'}`}
-                                        onClick={() => toggleActionStep(selectedCase, step)}
-                                    >
-                                        <div className={`mt-0.5 mr-2 w-4 h-4 rounded border flex items-center justify-center ${isCompleted ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-emerald-300'}`}>
-                                            {isCompleted && <CheckCircle2 size={12} />}
-                                        </div>
-                                        <span>{redactText(step, selectedCase.studentName)}</span>
-                                    </li>
-                                  );
-                              })}
-                          </ul>
+                      <div>
+                          <label className="block text-sm font-medium text-slate-700 mb-2">Resolution Notes</label>
+                          <div className="relative">
+                              <textarea 
+                                  value={selectedCase.resolutionNotes || ''}
+                                  onChange={(e) => handleResolutionNotesChange(selectedCase, e.target.value)}
+                                  onBlur={() => saveResolutionNotes(selectedCase)}
+                                  className="w-full p-4 border border-slate-300 rounded-lg h-32 focus:ring-2 focus:ring-indigo-500 outline-none text-sm"
+                                  placeholder="Enter details on how this case was resolved..."
+                              />
+                              {noteSaveStatus === 'SAVING' && <span className="absolute bottom-2 right-2 text-xs text-slate-400 italic">Saving...</span>}
+                              {noteSaveStatus === 'SAVED' && <span className="absolute bottom-2 right-2 text-xs text-green-600 font-bold flex items-center"><CheckCircle2 size={10} className="mr-1"/> Saved</span>}
+                          </div>
                       </div>
-                  </div>
-                  
-                  {/* Resolution Notes */}
-                  <div className="bg-slate-50 p-5 rounded-xl border border-slate-200">
-                       <div className="flex justify-between items-center mb-3">
-                           <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wide flex items-center">
-                               <CheckSquare size={16} className="mr-2 text-slate-500" /> Resolution / Updates
-                           </h3>
-                       </div>
-                       <textarea 
-                           className="w-full min-h-[100px] p-4 rounded-lg border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none text-sm leading-relaxed bg-white mb-3"
-                           placeholder="Add resolution notes, outcome summaries, or ongoing updates here..."
-                           value={selectedCase.resolutionNotes || ''}
-                           onChange={(e) => handleResolutionNotesChange(selectedCase, e.target.value)}
-                       />
-                       <div className="flex justify-between items-center">
-                            <div className="text-[10px] text-slate-400">
-                                {selectedCase.updatedAt ? `Last updated: ${new Date(selectedCase.updatedAt).toLocaleString()}` : ''}
-                            </div>
-                            <button 
-                                onClick={() => saveResolutionNotes(selectedCase)}
-                                disabled={noteSaveStatus === 'SAVING'}
-                                className={`flex items-center px-4 py-2 rounded-lg text-sm font-bold transition-all ${
-                                    noteSaveStatus === 'SAVED' 
-                                    ? 'bg-green-600 text-white' 
-                                    : 'bg-slate-800 text-white hover:bg-slate-900'
-                                }`}
-                            >
-                                {noteSaveStatus === 'SAVING' ? <Loader2 size={14} className="mr-2 animate-spin"/> : 
-                                 noteSaveStatus === 'SAVED' ? <CheckCircle2 size={14} className="mr-2"/> : 
-                                 <Save size={14} className="mr-2"/>}
-                                {noteSaveStatus === 'SAVING' ? 'Saving...' : 
-                                 noteSaveStatus === 'SAVED' ? 'Update Saved' : 'Submit Update'}
-                            </button>
-                       </div>
-                  </div>
+                  </section>
 
-                  <div>
-                      <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wide mb-3 flex items-center"><Shield size={16} className="mr-2 text-slate-400" /> Policies Applied</h3>
-                      <div className="flex flex-wrap gap-2">
-                        {selectedCase.generatedReport.policiesApplied.map((policy, i) => (<span key={i} className="px-3 py-1.5 bg-white border border-slate-200 text-slate-600 text-sm rounded-lg shadow-sm font-medium">{policy}</span>))}
+                  {/* 4. Access Log Audit (Mock) */}
+                  <section>
+                      <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wide mb-3 border-b border-slate-100 pb-2">Access Audit Log</h3>
+                      <div className="bg-slate-900 rounded-lg p-4 font-mono text-xs text-slate-300 space-y-2">
+                          {accessLogs.map((log, i) => (
+                              <div key={i} className="flex justify-between border-b border-slate-800 last:border-0 pb-1 last:pb-0">
+                                  <span>[{new Date(log.date).toLocaleString()}] {log.user}</span>
+                                  <span className="text-indigo-400">{log.action}</span>
+                              </div>
+                          ))}
                       </div>
-                  </div>
-
-                  {/* Access Audit Log (Visual only for this demo) */}
-                  <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
-                      <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wide mb-3 flex items-center"><History size={16} className="mr-2 text-slate-400" /> Access Audit Log</h3>
-                      <div className="overflow-x-auto">
-                          <table className="w-full text-xs text-left">
-                              <thead>
-                                  <tr className="text-slate-400 border-b border-slate-100">
-                                      <th className="pb-2 font-semibold">Timestamp</th>
-                                      <th className="pb-2 font-semibold">User</th>
-                                      <th className="pb-2 font-semibold">Action</th>
-                                  </tr>
-                              </thead>
-                              <tbody className="text-slate-600">
-                                  {accessLogs.map((log, i) => (
-                                      <tr key={i} className="border-b border-slate-50 last:border-0">
-                                          <td className="py-2 text-slate-400">{new Date(log.date).toLocaleString()}</td>
-                                          <td className="py-2 font-medium">{log.user}</td>
-                                          <td className="py-2">{log.action}</td>
-                                      </tr>
-                                  ))}
-                              </tbody>
-                          </table>
-                      </div>
-                  </div>
+                  </section>
               </div>
           </div>
       );
   }
 
-  // BUILD MODE
+  // BUILD MODE (Form)
   return (
-    <div className="animate-fade-in max-w-6xl mx-auto">
-      <header className="mb-8 flex items-center justify-between">
-        <div className="flex items-center space-x-3 mb-2">
-           <button onClick={() => { setMode('LIST'); setEditingId(null); setGeneratedCase(null); setStudentName(''); setDescription(''); }} className="p-2 bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200 transition-colors flex items-center"><ChevronRight className="rotate-180" size={20} /></button>
-           <h1 className="text-2xl font-bold text-slate-800">{editingId ? 'Edit Safeguarding Case' : 'New Safeguarding Case'}</h1>
-        </div>
-        <div className="text-sm text-slate-500">Filing as: <span className="font-semibold text-slate-800">{currentUser.name}</span></div>
-      </header>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* INPUT COLUMN */}
-        <div className="space-y-6">
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-            <h2 className="text-lg font-semibold text-slate-800 mb-4 flex items-center"><FileText size={20} className="mr-2 text-blue-600" /> Incident Details</h2>
-            <div className="space-y-4">
-              <div className="relative" ref={wrapperRef}>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Student Involved</label>
-                <div className="relative">
-                  <User className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" size={18} />
-                  <input type="text" value={studentName} onChange={(e) => { setStudentName(e.target.value); setShowSuggestions(true); if (studentName !== e.target.value) setSelectedLogIds([]); }} onFocus={() => setShowSuggestions(true)} className="w-full pl-10 pr-4 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-red-500 focus:border-transparent outline-none" placeholder="Search student name..." />
-                </div>
-                {showSuggestions && studentName && filteredStudents.length > 0 && (
-                  <div className="absolute z-20 w-full bg-white border border-slate-200 rounded-lg shadow-lg mt-1 overflow-hidden">
-                    {filteredStudents.map((student) => (
-                      <button key={student.id} onClick={() => { setStudentName(student.name); setShowSuggestions(false); setSelectedLogIds([]); }} className="w-full text-left px-4 py-2 hover:bg-slate-50 flex items-center"><span className="font-medium text-slate-700">{student.name}</span><span className="ml-auto text-xs text-slate-400">{student.studentClass}</span></button>
-                    ))}
-                  </div>
-                )}
-              </div>
-              
-              {/* Evidence Locker */}
-              {studentName && (
-                 <div className="border border-slate-200 rounded-xl bg-slate-50 overflow-hidden">
-                    <div className="px-4 py-3 bg-slate-100 border-b border-slate-200 flex justify-between items-center">
-                       <h3 className="text-xs font-bold text-slate-600 uppercase flex items-center tracking-wide"><Paperclip size={14} className="mr-1.5" /> Evidence Locker</h3>
-                       <div className="flex bg-white rounded-lg p-0.5 border border-slate-200">
-                          <button onClick={() => setEvidenceFilterType('ALL')} className={`px-3 py-1 text-[10px] font-bold rounded-md transition-all ${evidenceFilterType === 'ALL' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}>All History</button>
-                          <button onClick={() => setEvidenceFilterType('CONCERNS')} className={`px-3 py-1 text-[10px] font-bold rounded-md transition-all ${evidenceFilterType === 'CONCERNS' ? 'bg-red-50 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}>Concerns Only</button>
-                       </div>
-                    </div>
-                    
-                    <div className="max-h-60 overflow-y-auto custom-scrollbar p-2 space-y-2">
-                        {candidateLogs.length === 0 ? (<div className="text-center py-8 text-slate-400"><p className="text-xs italic">No logs found matching filter.</p></div>) : (
-                          candidateLogs.map(log => {
-                            const isSelected = selectedLogIds.includes(log.id);
-                            return (
-                              <div key={log.id} onClick={() => handleToggleLogEvidence(log.id)} className={`relative group p-3 rounded-lg cursor-pointer border-2 transition-all ${isSelected ? 'bg-white border-blue-500 shadow-md z-10' : 'bg-white border-transparent hover:border-slate-300 hover:shadow-sm'}`}>
-                                  <div className="flex justify-between items-start mb-2">
-                                      <div className="flex items-center space-x-2">
-                                          <div className={`transition-colors ${isSelected ? 'text-blue-600' : 'text-slate-300 group-hover:text-slate-400'}`}>{isSelected ? <CheckSquare size={18} /> : <Square size={18} />}</div>
-                                          <div><p className="text-xs font-bold text-slate-700">{new Date(log.date).toLocaleDateString()}</p><p className="text-[10px] text-slate-400 font-medium uppercase">{log.type}</p></div>
-                                      </div>
-                                      <div className="flex flex-col items-end">
-                                        {log.sentiment && log.sentiment !== 'Neutral' && (<span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border mb-1 ${log.sentiment === 'Concerned' ? 'bg-red-50 text-red-600 border-red-100' : 'bg-green-50 text-green-600 border-green-100'}`}>{log.sentiment}</span>)}
-                                      </div>
-                                  </div>
-                                  <p className="text-xs text-slate-600 line-clamp-2 pl-7 border-l-2 border-slate-100 ml-1">{log.notes}</p>
-                                  {log.createdBy && (<div className="mt-2 pl-7 flex items-center text-[10px] text-slate-400"><User size={10} className="mr-1" /> {log.createdBy}</div>)}
-                              </div>
-                            );
-                          })
-                        )}
-                    </div>
-                    {selectedLogIds.length > 0 && (<div className="bg-blue-50 px-4 py-2 border-t border-blue-100 flex justify-between items-center"><span className="text-xs font-bold text-blue-700">{selectedLogIds.length} Evidence Log(s) Selected</span><button onClick={() => setSelectedLogIds([])} className="text-[10px] text-blue-500 hover:text-blue-700 underline">Clear Selection</button></div>)}
-                 </div>
-              )}
-            </div>
-          </div>
-
-          {/* Incident Details Form */}
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 space-y-4">
-              <h2 className="text-lg font-semibold text-slate-800 mb-4 flex items-center"><Gavel size={20} className="mr-2 text-amber-600" /> Classification</h2>
-              
-              <div className="grid grid-cols-2 gap-4">
-                  <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-1">Incident Date</label>
-                      <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-red-500 outline-none" />
-                  </div>
-                  <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-1">Type</label>
-                       <div className="relative">
-                         <select value={incidentType} onChange={(e) => setIncidentType(e.target.value)} className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-red-500 outline-none appearance-none bg-white">
-                           {uniqueIncidentTypes.length > 0 ? uniqueIncidentTypes.map(t => <option key={t} value={t}>{t}</option>) : <option>Behavioral</option>}
-                           <option value="Bullying">Bullying</option>
-                           <option value="Physical Abuse">Physical Abuse</option>
-                           <option value="Sexual Harassment">Sexual Harassment</option>
-                           <option value="Online Safety">Online Safety</option>
-                           <option value="Substance Misuse">Substance Misuse</option>
-                           <option value="Other">Other</option>
-                         </select>
-                         <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 pointer-events-none" size={14} />
-                       </div>
-                  </div>
-              </div>
-              
+      <div className="animate-fade-in max-w-3xl mx-auto">
+          <div className="mb-6 flex items-center justify-between">
               <div>
-                   <label className="block text-sm font-medium text-slate-700 mb-1">Status</label>
-                   <div className="flex p-1 bg-slate-100 rounded-lg">
-                       {['Open', 'Investigating', 'Closed'].map((s) => (
-                           <button key={s} onClick={() => setStatus(s as any)} className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-all ${status === s ? 'bg-white shadow-sm text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}>{s}</button>
-                       ))}
-                   </div>
+                  <h2 className="text-2xl font-bold text-slate-800">{editingId ? 'Update Case File' : 'New Safeguarding Report'}</h2>
+                  <p className="text-slate-500 text-sm">All entries are securely logged and auditable.</p>
               </div>
-
-              <div className="flex items-center space-x-2 pt-2">
-                  <input type="checkbox" id="confidential" checked={isConfidential} onChange={(e) => setIsConfidential(e.target.checked)} className="rounded text-red-600 focus:ring-red-500 w-4 h-4" />
-                  <label htmlFor="confidential" className="text-sm font-medium text-slate-700 flex items-center">
-                      <Lock size={14} className="mr-1.5 text-slate-400" /> Mark as Confidential
-                  </label>
-              </div>
+              <button onClick={onCancel} className="text-slate-500 hover:text-slate-800 font-medium">Cancel</button>
           </div>
-        </div>
 
-        {/* OUTPUT COLUMN */}
-        <div className="space-y-6 flex flex-col h-full">
-             <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex-1 flex flex-col">
-                <h2 className="text-lg font-semibold text-slate-800 mb-4 flex items-center"><FileText size={20} className="mr-2 text-indigo-600" /> Description & Report</h2>
-                
-                <div className="mb-4 flex-1 flex flex-col">
-                    <label className="block text-sm font-medium text-slate-700 mb-1">Incident Description</label>
-                    <textarea 
-                        value={description} 
-                        onChange={(e) => setDescription(e.target.value)} 
-                        placeholder="Describe the incident in detail. The AI will analyze this along with selected evidence logs to generate the formal report."
-                        className="w-full flex-1 min-h-[150px] px-4 py-3 rounded-lg border border-slate-300 focus:ring-2 focus:ring-red-500 outline-none resize-none text-sm leading-relaxed"
-                    />
-                </div>
+          <div className="bg-white p-8 rounded-xl shadow-sm border border-slate-200 space-y-6">
+              {/* Student & Date */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="relative" ref={wrapperRef}>
+                      <label className="block text-sm font-bold text-slate-700 mb-1">Student Name</label>
+                      <div className="relative">
+                          <User className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" size={18} />
+                          <input 
+                              type="text" 
+                              value={studentName}
+                              onChange={(e) => { setStudentName(e.target.value); setShowSuggestions(true); }}
+                              onFocus={() => setShowSuggestions(true)}
+                              className="w-full pl-10 pr-4 py-2.5 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-red-500 transition-all"
+                              placeholder="Search student..."
+                          />
+                      </div>
+                      {showSuggestions && studentName && filteredStudents.length > 0 && (
+                          <div className="absolute z-10 w-full bg-white border border-slate-200 rounded-lg shadow-xl mt-1 overflow-hidden">
+                              {filteredStudents.map(s => (
+                                  <div key={s.id} onClick={() => { setStudentName(s.name); setShowSuggestions(false); }} className="px-4 py-3 hover:bg-slate-50 cursor-pointer text-sm text-slate-700 border-b border-slate-50 last:border-0">
+                                      {s.name} <span className="text-slate-400 text-xs ml-2">({s.id})</span>
+                                  </div>
+                              ))}
+                          </div>
+                      )}
+                  </div>
+                  <div>
+                      <label className="block text-sm font-bold text-slate-700 mb-1">Date of Incident</label>
+                      <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-full px-4 py-2.5 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-red-500 transition-all" />
+                  </div>
+              </div>
 
-                {generationError && (
-                    <div className="mb-4 p-3 bg-red-50 text-red-600 text-sm rounded-lg flex items-center">
-                        <AlertTriangle size={16} className="mr-2" />
-                        {generationError}
-                    </div>
-                )}
+              {/* Type & Confidentiality */}
+              <div className="flex flex-col md:flex-row gap-6">
+                  <div className="flex-1">
+                      <label className="block text-sm font-bold text-slate-700 mb-1">Incident Type</label>
+                      <select value={incidentType} onChange={(e) => setIncidentType(e.target.value)} className="w-full px-4 py-2.5 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-red-500 bg-white">
+                          {uniqueIncidentTypes.map(t => <option key={t} value={t}>{t}</option>)}
+                          <option value="Other">Other</option>
+                      </select>
+                  </div>
+                  <div className="flex items-end pb-2">
+                      <label className="flex items-center cursor-pointer space-x-3 p-2 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors select-none">
+                          <input type="checkbox" checked={isConfidential} onChange={(e) => setIsConfidential(e.target.checked)} className="w-5 h-5 text-red-600 rounded focus:ring-red-500" />
+                          <span className="flex items-center text-sm font-bold text-slate-700">
+                              <Lock size={16} className="mr-2 text-slate-400" /> Confidential Case
+                          </span>
+                      </label>
+                  </div>
+              </div>
 
-                {!generatedCase ? (
-                    <div className="bg-slate-50 rounded-xl border border-slate-200 border-dashed p-8 flex flex-col items-center justify-center text-center">
-                        <div className="w-12 h-12 bg-white rounded-full shadow-sm flex items-center justify-center mb-4 text-indigo-500">
-                            <Sparkles size={24} />
-                        </div>
-                        <h3 className="text-slate-800 font-bold mb-1">{editingId ? 'Regenerate Case File' : 'Generate AI Case File'}</h3>
-                        <p className="text-xs text-slate-500 max-w-xs mb-6">Gemini will draft a formal DSL summary, chronology, and risk assessment based on your description and evidence.</p>
-                        <button 
-                            onClick={handleGenerate}
-                            disabled={!studentName || !description || isGenerating}
-                            className="px-6 py-2 bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+              {/* Description */}
+              <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-1">Detailed Description</label>
+                  <textarea 
+                      value={description} 
+                      onChange={(e) => setDescription(e.target.value)} 
+                      className="w-full px-4 py-3 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-red-500 h-40 resize-none text-sm leading-relaxed" 
+                      placeholder="Describe the incident objectively. Include what was seen, heard, and actions taken immediately."
+                  />
+              </div>
+
+              {/* AI Actions */}
+              <div className="flex items-center justify-between pt-2">
+                  <button 
+                      onClick={handleGenerate}
+                      disabled={isGenerating || !description || !studentName}
+                      className={`flex items-center text-sm font-bold transition-colors ${
+                          isGenerating || !description || !studentName 
+                          ? 'text-slate-300 cursor-not-allowed' 
+                          : 'text-indigo-600 hover:text-indigo-700'
+                      }`}
+                  >
+                      {isGenerating ? <Loader2 size={16} className="animate-spin mr-2" /> : <Sparkles size={16} className="mr-2" />}
+                      {isGenerating ? 'AI Analyzing...' : 'Generate Report with AI'}
+                  </button>
+                  {generationError && <span className="text-xs text-red-500 font-medium">{generationError}</span>}
+              </div>
+
+              {/* Generated Preview & Save */}
+              {generatedCase && (
+                  <div className="mt-6 p-4 bg-slate-50 rounded-xl border border-slate-200 animate-fade-in">
+                      <h3 className="text-sm font-bold text-slate-700 mb-2 flex items-center">
+                          <CheckCircle2 size={16} className="text-green-500 mr-2" /> AI Summary Preview
+                      </h3>
+                      <p className="text-xs text-slate-600 leading-relaxed mb-4 p-3 bg-white rounded border border-slate-100">
+                          {generatedCase.dslSummary}
+                      </p>
+                      <div className="flex justify-end gap-3">
+                          <button onClick={() => setGeneratedCase(null)} className="px-4 py-2 text-slate-500 text-sm font-medium hover:text-slate-700">Discard</button>
+                          <button onClick={handleFinalSave} className="px-6 py-2 bg-indigo-600 text-white rounded-lg font-bold shadow-md hover:bg-indigo-700 transition-colors">
+                              {editingId ? 'Update Case' : 'File Report'}
+                          </button>
+                      </div>
+                  </div>
+              )}
+              
+              {!generatedCase && (
+                   <div className="flex justify-end pt-4 border-t border-slate-100">
+                       <button 
+                          onClick={handleFinalSave}
+                          disabled={!studentName || !description}
+                          className="px-6 py-2 bg-slate-900 text-white rounded-lg font-bold shadow-md hover:bg-black transition-colors disabled:opacity-50"
                         >
-                            {isGenerating ? <Loader2 size={18} className="animate-spin mr-2" /> : <BrainCircuit size={18} className="mr-2" />}
-                            {isGenerating ? 'Analyzing...' : 'Generate Report'}
-                        </button>
-                    </div>
-                ) : (
-                    <div className="space-y-4 animate-fade-in">
-                        <div className="bg-indigo-50 p-4 rounded-lg border border-indigo-100">
-                            <div className="flex justify-between items-start mb-2">
-                                <h3 className="text-xs font-bold text-indigo-800 uppercase tracking-wide">AI Generated Summary</h3>
-                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${generatedCase.riskLevel === 'High' || generatedCase.riskLevel === 'Critical' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>Risk: {generatedCase.riskLevel}</span>
-                            </div>
-                            <p className="text-sm text-indigo-900 leading-relaxed">{generatedCase.dslSummary}</p>
-                        </div>
-                        
-                        <div className="grid grid-cols-2 gap-3">
-                           <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
-                               <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Proposed Actions</p>
-                               <p className="text-sm font-bold text-slate-700">{generatedCase.nextSteps.length} steps identified</p>
-                           </div>
-                           <div className="p-3 bg-slate-50 rounded-lg border border-slate-100">
-                               <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Policy Matches</p>
-                               <p className="text-sm font-bold text-slate-700">{generatedCase.policiesApplied.length} policies</p>
-                           </div>
-                        </div>
-
-                        <div className="flex space-x-3 pt-2">
-                             <button onClick={() => setGeneratedCase(null)} className="flex-1 px-4 py-2 border border-slate-300 text-slate-600 rounded-lg font-medium hover:bg-slate-50">Edit Inputs</button>
-                             <button onClick={handleFinalSave} className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg font-bold hover:bg-green-700 shadow-lg shadow-green-200 flex items-center justify-center">
-                                 <Save size={18} className="mr-2" /> {editingId ? 'Update Case' : 'Save Case File'}
-                             </button>
-                        </div>
-                    </div>
-                )}
-             </div>
-        </div>
+                           Save Draft (Manual)
+                       </button>
+                   </div>
+              )}
+          </div>
       </div>
-    </div>
   );
 };
 
