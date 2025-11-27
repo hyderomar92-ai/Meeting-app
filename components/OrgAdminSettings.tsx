@@ -489,7 +489,7 @@ const OrgAdminSettings: React.FC<OrgAdminSettingsProps> = ({ currentUser, users,
                                     <option value="Teacher">Teacher</option>
                                     <option value="Head of Year">Head of Year</option>
                                     <option value="DSL">DSL</option>
-                                    <option value="Admin">Admin</option>
+                                    <option value="IT Admin">IT Admin</option>
                                   </>
                               )}
                           </select>

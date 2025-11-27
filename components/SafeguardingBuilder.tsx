@@ -3,7 +3,7 @@ import * as React from 'react';
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { SafeguardingCase, MeetingLog, UserProfile } from '../types';
 import { generateSafeguardingReport } from '../services/geminiService';
-import { Shield, AlertTriangle, FileText, Save, Loader2, Search, User, ChevronRight, ClipboardList, Gavel, Clock, Plus, Calendar, ArrowLeft, Filter, CheckCircle2, Activity, Trash2, Tag, BarChart3, Paperclip, CheckSquare, Square, Sparkles, BrainCircuit, Lock, Eye, EyeOff, Copy, ChevronDown, Edit3, History, Circle } from 'lucide-react';
+import { Shield, AlertTriangle, FileText, Save, Loader2, Search, User, ChevronRight, ClipboardList, Gavel, Clock, Plus, Calendar, ArrowLeft, Filter, CheckCircle2, Activity, Trash2, Tag, BarChart3, Paperclip, CheckSquare, Square, Sparkles, BrainCircuit, Lock, Eye, EyeOff, Copy, ChevronDown, Edit3, History, Circle, ExternalLink } from 'lucide-react';
 import { STUDENTS } from '../data/students';
 
 interface SafeguardingBuilderProps {
@@ -13,6 +13,7 @@ interface SafeguardingBuilderProps {
   onUpdate: (caseFile: SafeguardingCase) => void;
   onDelete: (id: string) => void;
   onCancel: () => void;
+  onNavigateToStudent: (studentName: string) => void;
   currentUser: UserProfile;
   initialSearchTerm?: string;
   initialData?: { studentName: string; description: string; date: string } | null;
@@ -27,7 +28,7 @@ const generateMockAccessLogs = (caseId: string, creator: string) => {
     ];
 };
 
-const SafeguardingBuilder: React.FC<SafeguardingBuilderProps> = ({ cases, logs, onSave, onUpdate, onDelete, onCancel, currentUser, initialSearchTerm = '', initialData }) => {
+const SafeguardingBuilder: React.FC<SafeguardingBuilderProps> = ({ cases, logs, onSave, onUpdate, onDelete, onCancel, onNavigateToStudent, currentUser, initialSearchTerm = '', initialData }) => {
   // RBAC: Teachers forced to BUILD mode, cannot see LIST
   const isTeacher = currentUser.role === 'Teacher';
   
@@ -281,6 +282,20 @@ const SafeguardingBuilder: React.FC<SafeguardingBuilderProps> = ({ cases, logs, 
         onCancel();
     }
   };
+
+  const handleInternalCancel = () => {
+      // If we came from escalation (initialData) or are a teacher, we exit the module entirely.
+      // If we are an admin just cancelling a form, we go back to the list.
+      if (initialData || isTeacher) {
+          onCancel();
+      } else {
+          setMode('LIST');
+          setEditingId(null);
+          setGeneratedCase(null);
+          setStudentName('');
+          setDescription('');
+      }
+  };
   
   // Interactive Update Handlers (Detail View)
   const toggleActionStep = (c: SafeguardingCase, step: string) => {
@@ -436,7 +451,11 @@ const SafeguardingBuilder: React.FC<SafeguardingBuilderProps> = ({ cases, logs, 
                                   </span>
                               </div>
                               <div className="flex items-center space-x-4 mb-4">
-                                  <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 font-bold text-lg group-hover:bg-red-50 group-hover:text-red-600 transition-colors">
+                                  <div 
+                                    className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 font-bold text-lg group-hover:bg-red-50 group-hover:text-red-600 transition-colors z-10"
+                                    onClick={(e) => { e.stopPropagation(); onNavigateToStudent(c.studentName); }}
+                                    title="View Student Profile"
+                                  >
                                       {c.studentName.charAt(0)}
                                   </div>
                                   <div>
@@ -496,14 +515,19 @@ const SafeguardingBuilder: React.FC<SafeguardingBuilderProps> = ({ cases, logs, 
                       </button>
                       <div className="h-6 w-px bg-slate-300 mx-2"></div>
                       <div>
-                          <h2 className="text-xl font-bold text-slate-800 flex items-center">
+                          <button 
+                            onClick={() => onNavigateToStudent(selectedCase.studentName)}
+                            className="text-xl font-bold text-slate-800 flex items-center hover:text-indigo-600 transition-colors group"
+                            title="View Student Profile"
+                          >
                             {selectedCase.studentName}
+                            <ExternalLink size={16} className="ml-2 opacity-50 group-hover:opacity-100" />
                             {selectedCase.isConfidential && (
                                 <span title="Confidential" className="ml-2 text-red-500 flex items-center">
                                     <Lock size={16} />
                                 </span>
                             )}
-                          </h2>
+                          </button>
                           <p className="text-xs text-slate-500">Case ID: {selectedCase.id.slice(0,8)} • {new Date(selectedCase.date).toLocaleDateString()}</p>
                       </div>
                   </div>
@@ -631,7 +655,7 @@ const SafeguardingBuilder: React.FC<SafeguardingBuilderProps> = ({ cases, logs, 
                   <h2 className="text-2xl font-bold text-slate-800">{editingId ? 'Update Case File' : 'New Safeguarding Report'}</h2>
                   <p className="text-slate-500 text-sm">All entries are securely logged and auditable.</p>
               </div>
-              <button onClick={onCancel} className="text-slate-500 hover:text-slate-800 font-medium">Cancel</button>
+              <button onClick={handleInternalCancel} className="text-slate-500 hover:text-slate-800 font-medium">Cancel</button>
           </div>
 
           <div className="bg-white p-8 rounded-xl shadow-sm border border-slate-200 space-y-6">

@@ -9,7 +9,7 @@ export enum MeetingType {
 }
 
 // UserRole is now a string to support custom roles, but we keep the type for backward compat where specific strings are checked
-export type UserRole = 'Teacher' | 'Head of Year' | 'DSL' | 'Admin' | 'Super Admin' | string;
+export type UserRole = 'Teacher' | 'Head of Year' | 'DSL' | 'IT Admin' | 'Super Admin' | string;
 
 export interface RolePermissions {
     // Core Data Access

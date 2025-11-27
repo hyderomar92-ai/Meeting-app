@@ -54,7 +54,7 @@ const SuperAdminTenants: React.FC<SuperAdminTenantsProps> = ({ organizations, on
           id: crypto.randomUUID(),
           name: 'School Admin',
           email: `admin@${orgName.toLowerCase().replace(/\s+/g, '')}.edu`, // Mock email generation
-          role: 'Admin',
+          role: 'IT Admin',
           initials: 'SA',
           orgId: orgId,
           status: 'Active'

@@ -45,7 +45,7 @@ const SuperAdminUserManagement: React.FC<SuperAdminUserManagementProps> = ({ use
           { id: 'def-t', name: 'Teacher' },
           { id: 'def-hoy', name: 'Head of Year' },
           { id: 'def-dsl', name: 'DSL' },
-          { id: 'def-admin', name: 'Admin' },
+          { id: 'def-admin', name: 'IT Admin' },
           { id: 'def-super', name: 'Super Admin' }
       ];
   }, [roles]);

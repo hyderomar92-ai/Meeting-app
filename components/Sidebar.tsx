@@ -41,7 +41,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, onLogout, cu
   
   // Determine access based on role permissions
   const canAccessAdminConfig = useMemo(() => {
-      if (currentUser.role === 'Admin') return true; // Backward compatibility
+      if (currentUser.role === 'IT Admin') return true; // Backward compatibility
       const userRoleDef = roles.find(r => r.name === currentUser.role);
       return userRoleDef?.permissions?.canManageUsers || false;
   }, [currentUser, roles]);

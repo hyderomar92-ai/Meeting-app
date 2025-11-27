@@ -1,21 +1,22 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
-import { ViewState, MeetingLog, MeetingType, SafeguardingCase, UserProfile, BehaviourEntry, Organization, UserRole, SeatingLayout, RoleDefinition } from './types';
+import React, { useState, useEffect } from 'react';
+import { 
+  UserProfile, ViewState, MeetingLog, BehaviourEntry, SafeguardingCase, 
+  Organization, RoleDefinition, ActionItem 
+} from './types';
+import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
 import MeetingForm from './components/MeetingForm';
 import HistoryView from './components/HistoryView';
-import StudentProfile from './components/StudentProfile';
 import StudentDirectory from './components/StudentDirectory';
+import ClassOverview from './components/ClassOverview';
 import SafeguardingBuilder from './components/SafeguardingBuilder';
-import ReportsView from './components/ReportsView';
-import LoginView from './components/LoginView';
 import BehaviourManager from './components/BehaviourManager';
 import SeatingPlanView from './components/SeatingPlanView';
-import ClassOverview from './components/ClassOverview';
+import ReportsView from './components/ReportsView';
+import StudentProfile from './components/StudentProfile';
+import LoginView from './components/LoginView';
 import SentinelChat from './components/SentinelChat';
-import Sidebar from './components/Sidebar';
-
-// Super Admin Components
 import SuperAdminDashboard from './components/SuperAdminDashboard';
 import SuperAdminTenants from './components/SuperAdminTenants';
 import SuperAdminAIMonitor from './components/SuperAdminAIMonitor';
@@ -28,490 +29,303 @@ import SuperAdminData from './components/SuperAdminData';
 import SuperAdminResources from './components/SuperAdminResources';
 import SuperAdminBranding from './components/SuperAdminBranding';
 import SuperAdminFeedback from './components/SuperAdminFeedback';
-
-// Org Admin Components
 import OrgAdminSettings from './components/OrgAdminSettings';
 
-// Default Data
-const DEFAULT_ORGS: Organization[] = [
-    { 
-        id: 'org-1', name: 'Springfield Academy', type: 'School', status: 'Active', licenseTier: 'Pro', 
-        staffCount: 45, studentCount: 650, renewalDate: '2024-09-01',
-        tokenUsageCurrentPeriod: 154000, tokenLimit: 1000000, aiCostEstimate: 1.54,
-        features: { safeguarding: true, aiAssistant: true, parentPortal: true },
-        churnRisk: 'Low'
-    }
-];
-
-// Initialize Roles with Permissions
-const DEFAULT_ROLES: RoleDefinition[] = [
-    {
-        id: 'role-admin', name: 'Admin', isSystem: true,
-        permissions: { 
-            canViewSafeguarding: true, 
-            canManageSafeguarding: true,
-            canViewBehavior: true, 
-            canEditBehavior: true, 
-            canManageSeating: true,
-            canRunReports: true,
-            canExportData: true,
-            canManageUsers: true, 
-            canConfigureSystem: true,
-            classManager: { showRiskAnalysis: true, showBehaviorTrends: true, showStudentRoster: true, showActivityFeed: true } 
-        }
-    },
-    {
-        id: 'role-dsl', name: 'DSL', isSystem: true,
-        permissions: { 
-            canViewSafeguarding: true, 
-            canManageSafeguarding: true,
-            canViewBehavior: true, 
-            canEditBehavior: true, 
-            canManageSeating: false,
-            canRunReports: true,
-            canExportData: true,
-            canManageUsers: true, 
-            canConfigureSystem: false,
-            classManager: { showRiskAnalysis: true, showBehaviorTrends: true, showStudentRoster: true, showActivityFeed: true } 
-        }
-    },
-    {
-        id: 'role-hoy', name: 'Head of Year', isSystem: true,
-        permissions: { 
-            canViewSafeguarding: true, 
-            canManageSafeguarding: false, // View only
-            canViewBehavior: true, 
-            canEditBehavior: true, 
-            canManageSeating: true,
-            canRunReports: true,
-            canExportData: false,
-            canManageUsers: false, 
-            canConfigureSystem: false,
-            classManager: { showRiskAnalysis: true, showBehaviorTrends: true, showStudentRoster: true, showActivityFeed: true } 
-        }
-    },
-    {
-        id: 'role-teacher', name: 'Teacher', isSystem: true,
-        permissions: { 
-            canViewSafeguarding: false, 
-            canManageSafeguarding: false,
-            canViewBehavior: true, 
-            canEditBehavior: true, 
-            canManageSeating: true,
-            canRunReports: false,
-            canExportData: false,
-            canManageUsers: false, 
-            canConfigureSystem: false,
-            classManager: { showRiskAnalysis: false, showBehaviorTrends: true, showStudentRoster: true, showActivityFeed: true } 
-        }
-    },
-    {
-        id: 'role-super', name: 'Super Admin', isSystem: true,
-        permissions: { 
-            canViewSafeguarding: true, 
-            canManageSafeguarding: true,
-            canViewBehavior: true, 
-            canEditBehavior: true, 
-            canManageSeating: true,
-            canRunReports: true,
-            canExportData: true,
-            canManageUsers: true, 
-            canConfigureSystem: true,
-            classManager: { showRiskAnalysis: true, showBehaviorTrends: true, showStudentRoster: true, showActivityFeed: true } 
-        }
-    }
-];
-
-const DEFAULT_USERS: UserProfile[] = [
-  { id: 'u0', name: 'System Owner', role: 'Super Admin', initials: 'SO', status: 'Active' },
-  { id: 'u1', name: 'Jane Doe', role: 'Head of Year', initials: 'JD', orgId: 'org-1', status: 'Active', allowedYearGroups: ['07', '08'] },
-  { id: 'u2', name: 'John Smith', role: 'Teacher', initials: 'JS', orgId: 'org-1', status: 'Active', allowedYearGroups: ['07B'] },
-  { id: 'u3', name: 'Sarah Connor', role: 'DSL', initials: 'SC', orgId: 'org-1', status: 'Active' },
-  { id: 'u4', name: 'Emily Blunt', role: 'Admin', initials: 'EB', orgId: 'org-1', status: 'Active' },
-];
-
 const App: React.FC = () => {
-  // --- Global State ---
+  // Auth State
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
+  
+  // Navigation State
   const [currentView, setCurrentView] = useState<ViewState>('DASHBOARD');
   const [selectedStudent, setSelectedStudent] = useState<string | undefined>(undefined);
   const [escalationData, setEscalationData] = useState<{ studentName: string; description: string; date: string } | null>(null);
 
-  // --- Data Stores (Persisted) ---
-  const [allUsers, setAllUsers] = useState<UserProfile[]>(() => {
-      try {
-          const saved = localStorage.getItem('sentinel_users');
-          return saved ? JSON.parse(saved) : DEFAULT_USERS;
-      } catch (e) { return DEFAULT_USERS; }
-  });
-
-  const [roles, setRoles] = useState<RoleDefinition[]>(() => {
-      try {
-          const saved = localStorage.getItem('sentinel_roles');
-          return saved ? JSON.parse(saved) : DEFAULT_ROLES;
-      } catch (e) { return DEFAULT_ROLES; }
-  });
-
-  const [organizations, setOrganizations] = useState<Organization[]>(() => {
-      try {
-          const saved = localStorage.getItem('sentinel_orgs');
-          return saved ? JSON.parse(saved) : DEFAULT_ORGS;
-      } catch (e) { return DEFAULT_ORGS; }
-  });
-
-  const [allLogs, setAllLogs] = useState<MeetingLog[]>(() => {
-      try {
-          const saved = localStorage.getItem('sentinel_logs');
-          return saved ? JSON.parse(saved) : [];
-      } catch (e) { return []; }
-  });
-
-  const [allSafeguarding, setAllSafeguarding] = useState<SafeguardingCase[]>(() => {
-      try {
-          const saved = localStorage.getItem('sentinel_safeguarding');
-          return saved ? JSON.parse(saved) : [];
-      } catch (e) { return []; }
-  });
-
-  const [allBehavior, setAllBehavior] = useState<BehaviourEntry[]>(() => {
-      try {
-          const saved = localStorage.getItem('sentinel_behavior');
-          return saved ? JSON.parse(saved) : [];
-      } catch (e) { return []; }
-  });
-
-  // --- Persistence Effects ---
-  useEffect(() => { localStorage.setItem('sentinel_users', JSON.stringify(allUsers)); }, [allUsers]);
-  useEffect(() => { localStorage.setItem('sentinel_roles', JSON.stringify(roles)); }, [roles]);
-  useEffect(() => { localStorage.setItem('sentinel_orgs', JSON.stringify(organizations)); }, [organizations]);
-  useEffect(() => { localStorage.setItem('sentinel_logs', JSON.stringify(allLogs)); }, [allLogs]);
-  useEffect(() => { localStorage.setItem('sentinel_safeguarding', JSON.stringify(allSafeguarding)); }, [allSafeguarding]);
-  useEffect(() => { localStorage.setItem('sentinel_behavior', JSON.stringify(allBehavior)); }, [allBehavior]);
-
-  // --- Multi-Tenancy Filtering ---
-  // Filter data based on the logged-in user's Organization ID.
-  const tenantData = useMemo(() => {
-      if (!currentUser || currentUser.role === 'Super Admin') {
-          return {
-              logs: allLogs,
-              safeguarding: allSafeguarding,
-              behavior: allBehavior,
-              users: allUsers,
-              roles: roles
-          };
+  // Data State (Simulated Database)
+  const [logs, setLogs] = useState<MeetingLog[]>([]);
+  const [behavior, setBehavior] = useState<BehaviourEntry[]>([]);
+  const [safeguarding, setSafeguarding] = useState<SafeguardingCase[]>([]);
+  
+  // Admin Data State
+  const [users, setUsers] = useState<UserProfile[]>([
+      { id: 'u1', name: 'Demo Teacher', role: 'Teacher', initials: 'DT', status: 'Active', orgId: 'org-1' },
+      { id: 'u2', name: 'Head of Year', role: 'Head of Year', initials: 'HY', status: 'Active', orgId: 'org-1' },
+      { id: 'u3', name: 'Safeguarding Lead', role: 'DSL', initials: 'SL', status: 'Active', orgId: 'org-1' },
+      { id: 'u4', name: 'IT Admin', role: 'IT Admin', initials: 'IT', status: 'Active', orgId: 'org-1' },
+      { id: 'u0', name: 'System Owner', role: 'Super Admin', initials: 'SO', status: 'Active' }
+  ]);
+  const [organizations, setOrganizations] = useState<Organization[]>([
+      { 
+          id: 'org-1', name: 'Springfield Academy', type: 'School', status: 'Active', licenseTier: 'Pro', 
+          studentCount: 1200, staffCount: 85, renewalDate: '2024-12-31', 
+          tokenUsageCurrentPeriod: 450000, tokenLimit: 1000000, aiCostEstimate: 4.50,
+          features: { safeguarding: true, aiAssistant: true, parentPortal: false }
       }
+  ]);
+  const [roles, setRoles] = useState<RoleDefinition[]>([]);
 
-      const orgId = currentUser.orgId;
-      return {
-          logs: allLogs.filter(l => l.orgId === orgId),
-          safeguarding: allSafeguarding.filter(s => s.orgId === orgId),
-          behavior: allBehavior.filter(b => b.orgId === orgId),
-          users: allUsers.filter(u => u.orgId === orgId),
-          roles: roles.filter(r => r.isSystem || r.orgId === orgId) // Show system roles + org roles
-      };
-  }, [currentUser, allLogs, allSafeguarding, allBehavior, allUsers, roles]);
+  // Tenant Data Helper
+  const tenantData = { logs, behavior, safeguarding };
 
+  // Effects to load/save data
+  useEffect(() => {
+      const savedLogs = localStorage.getItem('sentinel_logs');
+      if (savedLogs) setLogs(JSON.parse(savedLogs));
+      
+      const savedBehavior = localStorage.getItem('sentinel_behavior');
+      if (savedBehavior) setBehavior(JSON.parse(savedBehavior));
 
-  // --- Actions ---
+      const savedSafeguarding = localStorage.getItem('sentinel_safeguarding');
+      if (savedSafeguarding) setSafeguarding(JSON.parse(savedSafeguarding));
+  }, []);
+
+  useEffect(() => {
+      localStorage.setItem('sentinel_logs', JSON.stringify(logs));
+  }, [logs]);
+
+  useEffect(() => {
+      localStorage.setItem('sentinel_behavior', JSON.stringify(behavior));
+  }, [behavior]);
+
+  useEffect(() => {
+      localStorage.setItem('sentinel_safeguarding', JSON.stringify(safeguarding));
+  }, [safeguarding]);
+
+  // Navigation Handlers
+  const handleNavigate = (view: ViewState, studentName?: string) => {
+      setCurrentView(view);
+      if (studentName) setSelectedStudent(studentName);
+  };
 
   const handleLogin = (user: UserProfile) => {
-    setCurrentUser(user);
-    if (user.role === 'Super Admin') {
-        setCurrentView('SUPER_ADMIN_DASHBOARD');
-    } else {
-        setCurrentView('DASHBOARD');
-    }
+      setCurrentUser(user);
+      setCurrentView(user.role === 'Super Admin' ? 'SUPER_ADMIN_DASHBOARD' : 'DASHBOARD');
   };
 
   const handleLogout = () => {
-    setCurrentUser(null);
-    setCurrentView('DASHBOARD');
-    setSelectedStudent(undefined);
-    setEscalationData(null);
+      setCurrentUser(null);
+      setCurrentView('DASHBOARD');
+      setSelectedStudent(undefined);
   };
 
-  const handleNavigate = (view: ViewState, studentName?: string) => {
-    setCurrentView(view);
-    if (studentName) setSelectedStudent(studentName);
-  };
-
-  // --- Data Modifiers ---
-
+  // Data Mutation Handlers
   const handleSaveLog = (newLog: MeetingLog) => {
-    const logWithTenant = { ...newLog, orgId: currentUser?.orgId };
-    setAllLogs(prev => [logWithTenant, ...prev]);
-    handleNavigate('HISTORY');
+      setLogs([newLog, ...logs]);
+      handleNavigate('HISTORY');
+  };
+
+  const handleAddBehavior = (entries: BehaviourEntry[]) => {
+      setBehavior([...entries, ...behavior]);
   };
 
   const handleSaveSafeguarding = (newCase: SafeguardingCase) => {
-    const caseWithTenant = { ...newCase, orgId: currentUser?.orgId };
-    setAllSafeguarding(prev => [caseWithTenant, ...prev]);
-    setEscalationData(null); // Clear escalation state on save
+      setSafeguarding([newCase, ...safeguarding]);
   };
 
   const handleUpdateSafeguarding = (updatedCase: SafeguardingCase) => {
-    setAllSafeguarding(prev => prev.map(c => c.id === updatedCase.id ? updatedCase : c));
+      setSafeguarding(safeguarding.map(c => c.id === updatedCase.id ? updatedCase : c));
   };
 
   const handleDeleteSafeguarding = (id: string) => {
-    setAllSafeguarding(prev => prev.filter(c => c.id !== id));
-  };
-
-  const handleAddBehaviour = (newEntries: BehaviourEntry[]) => {
-    const entriesWithTenant = newEntries.map(e => ({ ...e, orgId: currentUser?.orgId }));
-    setAllBehavior(prev => [...entriesWithTenant, ...prev]);
+      setSafeguarding(safeguarding.filter(c => c.id !== id));
   };
 
   const handleToggleActionItem = (logId: string, actionItemId: string) => {
-    setAllLogs(prev => prev.map(log => {
-      if (log.id === logId) {
-        return {
-          ...log,
-          actionItems: log.actionItems.map(item => 
-            item.id === actionItemId 
-              ? { ...item, status: item.status === 'Pending' ? 'Completed' : 'Pending' }
-              : item
-          )
-        };
-      }
-      return log;
-    }));
+      setLogs(logs.map(log => {
+          if (log.id === logId) {
+              return {
+                  ...log,
+                  actionItems: log.actionItems?.map(item => 
+                      item.id === actionItemId 
+                          ? { ...item, status: item.status === 'Pending' ? 'Completed' : 'Pending' } as ActionItem
+                          : item
+                  )
+              };
+          }
+          return log;
+      }));
   };
 
   const handleMarkAllActionsCompleted = (studentName: string) => {
-      if(window.confirm(`Mark all pending actions for ${studentName} as completed?`)) {
-          setAllLogs(prev => prev.map(log => {
-              if(log.attendees.includes(studentName)) {
-                  return {
-                      ...log,
-                      actionItems: log.actionItems.map(item => ({ ...item, status: 'Completed' }))
-                  }
-              }
-              return log;
-          }));
-      }
+      setLogs(logs.map(log => {
+          if (log.attendees.includes(studentName)) {
+              return {
+                  ...log,
+                  actionItems: log.actionItems?.map(item => ({ ...item, status: 'Completed' } as ActionItem))
+              };
+          }
+          return log;
+      }));
   };
 
-  // --- Tenant Management ---
-  const handleAddOrg = (newOrg: Organization, initialAdmin?: UserProfile) => {
-      setOrganizations(prev => [...prev, newOrg]);
-      if (initialAdmin) {
-          setAllUsers(prev => [...prev, initialAdmin]);
-      }
+  const handleEscalateToSafeguarding = (data: { studentName: string; description: string; date: string }) => {
+      setEscalationData(data);
+      handleNavigate('SAFEGUARDING');
   };
 
-  const handleUpdateOrg = (updatedOrg: Organization) => {
-      setOrganizations(prev => prev.map(o => o.id === updatedOrg.id ? updatedOrg : o));
+  // Super Admin Handlers
+  const handleAddOrg = (org: Organization, admin: UserProfile) => {
+      setOrganizations([...organizations, org]);
+      setUsers([...users, admin]);
   };
-
-  const handleImpersonate = (orgId: string) => {
-      const orgAdmin = allUsers.find(u => u.orgId === orgId && (u.role === 'Admin' || u.role === 'DSL'));
-      if (orgAdmin) {
-          setCurrentUser(orgAdmin);
-          setCurrentView('DASHBOARD');
-      } else {
-          alert("No admin user found for this organization to impersonate.");
-      }
-  };
-
-  // --- Render Logic ---
 
   if (!currentUser) {
-    return (
-        <LoginView 
-            onLogin={handleLogin} 
-            users={allUsers} 
-            onUpdateUsers={setAllUsers}
-            organizations={organizations}
-            onDeleteUserRequest={(id) => setAllUsers(allUsers.filter(u => u.id !== id))}
-            onResetSystemRequest={() => {
-                localStorage.clear();
-                window.location.reload();
-            }}
-            roles={roles} // Pass roles to login for creating new users with correct role options
-        />
-    );
+      return (
+          <LoginView 
+              onLogin={handleLogin} 
+              users={users} 
+              onUpdateUsers={setUsers} 
+              organizations={organizations}
+              roles={roles}
+          />
+      );
   }
 
   return (
-    <div className="flex h-screen bg-slate-50 overflow-hidden">
-      <Sidebar 
-        currentView={currentView} 
-        onNavigate={handleNavigate} 
-        onLogout={handleLogout}
-        currentUser={currentUser}
-        roles={roles}
-      />
-      
-      <main className="flex-1 overflow-y-auto p-4 md:p-8 custom-scrollbar relative">
-        <div className="max-w-7xl mx-auto pb-20">
-          
-          {/* USER VIEW ROUTES */}
-          {currentView === 'DASHBOARD' && (
-            <Dashboard 
-              logs={tenantData.logs} 
-              safeguardingCases={tenantData.safeguarding}
-              behaviourEntries={tenantData.behavior}
-              onNavigate={handleNavigate}
+      <div className="flex h-screen bg-slate-100 font-sans text-slate-900">
+          <Sidebar 
+              currentView={currentView} 
+              onNavigate={handleNavigate} 
+              onLogout={handleLogout} 
               currentUser={currentUser}
-            />
-          )}
+              roles={roles}
+          />
           
-          {currentView === 'NEW_LOG' && (
-            <MeetingForm 
-              onSubmit={handleSaveLog} 
-              onCancel={() => handleNavigate('DASHBOARD')}
-              currentUser={currentUser}
-              initialAttendees={selectedStudent ? [selectedStudent] : []}
-              onEscalate={(data) => {
-                  setEscalationData(data);
-                  handleNavigate('SAFEGUARDING');
-              }}
-            />
-          )}
-          
-          {currentView === 'HISTORY' && (
-            <HistoryView 
-              logs={tenantData.logs} 
-              onSelectStudent={(name) => handleNavigate('STUDENT_PROFILE', name)}
-              currentUser={currentUser}
-            />
-          )}
-          
-          {currentView === 'STUDENTS_DIRECTORY' && (
-            <StudentDirectory 
-                onSelectStudent={(name) => handleNavigate('STUDENT_PROFILE', name)}
-                onQuickLog={(name) => handleNavigate('NEW_LOG', name)}
-                safeguardingCases={tenantData.safeguarding}
-            />
-          )}
+          <main className="flex-1 overflow-auto p-4 md:p-8 relative">
+              {/* Views */}
+              {currentView === 'DASHBOARD' && (
+                  <Dashboard 
+                      logs={logs} 
+                      safeguardingCases={safeguarding}
+                      behaviourEntries={behavior}
+                      onNavigate={handleNavigate}
+                      currentUser={currentUser}
+                  />
+              )}
 
-          {currentView === 'CLASS_OVERVIEW' && (
-            <ClassOverview 
-                logs={tenantData.logs}
-                behaviourEntries={tenantData.behavior}
-                safeguardingCases={tenantData.safeguarding}
-                onNavigateToStudent={(name) => handleNavigate('STUDENT_PROFILE', name)}
-                currentUser={currentUser}
-                roles={roles} // Pass global role definitions for permission checks
-            />
-          )}
-          
-          {currentView === 'STUDENT_PROFILE' && selectedStudent && (
-            <StudentProfile 
-              studentName={selectedStudent}
-              logs={tenantData.logs}
-              behaviourEntries={tenantData.behavior}
-              safeguardingCases={tenantData.safeguarding}
-              onBack={() => handleNavigate('STUDENTS_DIRECTORY')}
-              onToggleActionItem={handleToggleActionItem}
-              onMarkAllCompleted={handleMarkAllActionsCompleted}
-              onQuickLog={(name) => handleNavigate('NEW_LOG', name)}
-              onViewSafeguarding={() => handleNavigate('SAFEGUARDING')}
-              currentUser={currentUser}
-            />
-          )}
+              {currentView === 'NEW_LOG' && (
+                  <MeetingForm 
+                      onSubmit={handleSaveLog} 
+                      onCancel={() => handleNavigate('DASHBOARD')}
+                      initialAttendees={selectedStudent ? [selectedStudent] : []}
+                      currentUser={currentUser}
+                      onEscalate={handleEscalateToSafeguarding}
+                  />
+              )}
 
-          {currentView === 'SAFEGUARDING' && (
-              <SafeguardingBuilder 
-                  cases={tenantData.safeguarding}
-                  logs={tenantData.logs}
-                  onSave={(c) => {
-                      handleSaveSafeguarding(c);
-                      handleNavigate('SAFEGUARDING'); // Stay on list or navigate elsewhere
-                  }}
-                  onUpdate={handleUpdateSafeguarding}
-                  onDelete={handleDeleteSafeguarding}
-                  onCancel={() => {
-                      setEscalationData(null);
-                      handleNavigate('DASHBOARD');
-                  }}
+              {currentView === 'HISTORY' && (
+                  <HistoryView 
+                      logs={logs} 
+                      onSelectStudent={(name) => handleNavigate('STUDENT_PROFILE', name)} 
+                      currentUser={currentUser}
+                  />
+              )}
+
+              {currentView === 'STUDENTS_DIRECTORY' && (
+                  <StudentDirectory 
+                      onSelectStudent={(name) => handleNavigate('STUDENT_PROFILE', name)}
+                      onQuickLog={(name) => handleNavigate('NEW_LOG', name)}
+                      safeguardingCases={safeguarding}
+                  />
+              )}
+
+              {currentView === 'CLASS_OVERVIEW' && (
+                  <ClassOverview 
+                      logs={logs}
+                      behaviourEntries={behavior}
+                      safeguardingCases={safeguarding}
+                      onNavigateToStudent={(name) => handleNavigate('STUDENT_PROFILE', name)}
+                      currentUser={currentUser}
+                      roles={roles}
+                  />
+              )}
+
+              {currentView === 'BEHAVIOUR' && (
+                  <BehaviourManager 
+                      currentUser={currentUser}
+                      entries={behavior}
+                      onAddEntries={handleAddBehavior}
+                      onNavigateToStudent={(name) => handleNavigate('STUDENT_PROFILE', name)}
+                  />
+              )}
+
+              {currentView === 'SEATING_PLAN' && (
+                  <SeatingPlanView 
+                      behaviourEntries={behavior}
+                      safeguardingCases={safeguarding}
+                      onNavigateToStudent={(name) => handleNavigate('STUDENT_PROFILE', name)}
+                  />
+              )}
+
+              {currentView === 'REPORTS' && (
+                  <ReportsView 
+                      logs={logs}
+                      safeguardingCases={safeguarding}
+                  />
+              )}
+
+              {currentView === 'STUDENT_PROFILE' && selectedStudent && (
+                <StudentProfile 
+                  studentName={selectedStudent}
+                  logs={logs}
+                  behaviourEntries={behavior}
+                  safeguardingCases={safeguarding}
+                  onBack={() => handleNavigate('STUDENTS_DIRECTORY')}
+                  onToggleActionItem={handleToggleActionItem}
+                  onMarkAllCompleted={handleMarkAllActionsCompleted}
+                  onQuickLog={(name) => handleNavigate('NEW_LOG', name)}
+                  onViewSafeguarding={(name) => handleNavigate('SAFEGUARDING', name)}
                   currentUser={currentUser}
-                  initialSearchTerm={selectedStudent}
-                  initialData={escalationData}
-              />
-          )}
+                />
+              )}
 
-          {currentView === 'REPORTS' && (
-              <ReportsView 
-                  logs={tenantData.logs}
-                  safeguardingCases={tenantData.safeguarding}
-              />
-          )}
+              {currentView === 'SAFEGUARDING' && (
+                  <SafeguardingBuilder 
+                      cases={safeguarding}
+                      logs={logs}
+                      onSave={(c) => {
+                          handleSaveSafeguarding(c);
+                          handleNavigate('SAFEGUARDING'); 
+                      }}
+                      onUpdate={handleUpdateSafeguarding}
+                      onDelete={handleDeleteSafeguarding}
+                      onCancel={() => {
+                          setEscalationData(null);
+                          handleNavigate('DASHBOARD');
+                      }}
+                      onNavigateToStudent={(name) => handleNavigate('STUDENT_PROFILE', name)}
+                      currentUser={currentUser}
+                      initialSearchTerm={selectedStudent}
+                      initialData={escalationData}
+                  />
+              )}
 
-          {currentView === 'BEHAVIOUR' && (
-              <BehaviourManager 
-                  currentUser={currentUser}
-                  entries={tenantData.behavior}
-                  onAddEntries={handleAddBehaviour}
-                  onNavigateToStudent={(name) => handleNavigate('STUDENT_PROFILE', name)}
-              />
-          )}
+              {currentView === 'ORG_SETTINGS' && (
+                  <OrgAdminSettings 
+                      currentUser={currentUser}
+                      users={users}
+                      onUpdateUsers={setUsers}
+                      roles={roles}
+                      onUpdateRoles={setRoles}
+                  />
+              )}
 
-          {currentView === 'SEATING_PLAN' && (
-              <SeatingPlanView 
-                  behaviourEntries={tenantData.behavior}
-                  safeguardingCases={tenantData.safeguarding}
-                  onNavigateToStudent={(name) => handleNavigate('STUDENT_PROFILE', name)}
-              />
-          )}
+              {/* SUPER ADMIN VIEWS */}
+              {currentView === 'SUPER_ADMIN_DASHBOARD' && <SuperAdminDashboard organizations={organizations} />}
+              {currentView === 'SUPER_ADMIN_TENANTS' && <SuperAdminTenants organizations={organizations} onAddOrg={handleAddOrg} onUpdateOrg={(o) => setOrganizations(organizations.map(org => org.id === o.id ? o : org))} onImpersonate={(id) => { const admin = users.find(u => u.orgId === id && u.role === 'IT Admin'); if(admin) handleLogin(admin); }} />}
+              {currentView === 'SUPER_ADMIN_AI' && <SuperAdminAIMonitor organizations={organizations} />}
+              {currentView === 'SUPER_ADMIN_SECURITY' && <SuperAdminSecurity />}
+              {currentView === 'SUPER_ADMIN_TOOLS' && <SuperAdminTools />}
+              {currentView === 'SUPER_ADMIN_OPS' && <SuperAdminOperations allUsers={users} onUpdateUsers={setUsers} roles={roles} />}
+              {currentView === 'SUPER_ADMIN_SUBSCRIPTIONS' && <SuperAdminSubscriptions />}
+              {currentView === 'SUPER_ADMIN_INTEGRATIONS' && <SuperAdminIntegrations />}
+              {currentView === 'SUPER_ADMIN_DATA' && <SuperAdminData organizations={organizations} />}
+              {currentView === 'SUPER_ADMIN_RESOURCES' && <SuperAdminResources />}
+              {currentView === 'SUPER_ADMIN_BRANDING' && <SuperAdminBranding />}
+              {currentView === 'SUPER_ADMIN_FEEDBACK' && <SuperAdminFeedback />}
 
-          {currentView === 'ORG_SETTINGS' && (
-              <OrgAdminSettings 
-                  currentUser={currentUser}
-                  users={tenantData.users}
-                  onUpdateUsers={(updated) => {
-                      const otherUsers = allUsers.filter(u => u.orgId !== currentUser.orgId);
-                      setAllUsers([...otherUsers, ...updated]);
-                  }}
-                  roles={tenantData.roles}
-                  onUpdateRoles={(updatedRoles) => {
-                      const otherRoles = roles.filter(r => r.orgId !== currentUser.orgId && !r.isSystem);
-                      // Merge system roles (which are shared but filtered in tenantData) is tricky.
-                      // Simplified: We overwrite tenant-specific roles and keep system ones.
-                      // For this demo, let's just update global state carefully.
-                      const newGlobalRoles = roles.map(r => {
-                          const updated = updatedRoles.find(ur => ur.id === r.id);
-                          return updated || r;
-                      });
-                      
-                      // Add any completely new roles
-                      updatedRoles.forEach(ur => {
-                          if(!roles.find(r => r.id === ur.id)) {
-                              newGlobalRoles.push(ur);
-                          }
-                      });
-                      setRoles(newGlobalRoles);
-                  }}
-              />
-          )}
-
-          {/* SUPER ADMIN ROUTES */}
-          {currentView === 'SUPER_ADMIN_DASHBOARD' && <SuperAdminDashboard organizations={organizations} />}
-          {currentView === 'SUPER_ADMIN_TENANTS' && <SuperAdminTenants organizations={organizations} onAddOrg={handleAddOrg} onUpdateOrg={handleUpdateOrg} onImpersonate={handleImpersonate} />}
-          {currentView === 'SUPER_ADMIN_AI' && <SuperAdminAIMonitor organizations={organizations} />}
-          {currentView === 'SUPER_ADMIN_SECURITY' && <SuperAdminSecurity />}
-          {currentView === 'SUPER_ADMIN_TOOLS' && <SuperAdminTools />}
-          {currentView === 'SUPER_ADMIN_OPS' && <SuperAdminOperations allUsers={allUsers} onUpdateUsers={setAllUsers} roles={roles} />}
-          {currentView === 'SUPER_ADMIN_SUBSCRIPTIONS' && <SuperAdminSubscriptions />}
-          {currentView === 'SUPER_ADMIN_INTEGRATIONS' && <SuperAdminIntegrations />}
-          {currentView === 'SUPER_ADMIN_DATA' && <SuperAdminData organizations={organizations} />}
-          {currentView === 'SUPER_ADMIN_RESOURCES' && <SuperAdminResources />}
-          {currentView === 'SUPER_ADMIN_BRANDING' && <SuperAdminBranding />}
-          {currentView === 'SUPER_ADMIN_FEEDBACK' && <SuperAdminFeedback />}
-
-        </div>
-
-        {/* Floating Chat Assistant (Available in non-Super Admin views) */}
-        {currentUser.role !== 'Super Admin' && (
-            <SentinelChat 
-                logs={tenantData.logs}
-                safeguarding={tenantData.safeguarding}
-                behavior={tenantData.behavior}
-            />
-        )}
-      </main>
-    </div>
+              <SentinelChat logs={logs} safeguarding={safeguarding} behavior={behavior} />
+          </main>
+      </div>
   );
 };
 

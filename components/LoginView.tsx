@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo } from 'react';
 import { UserProfile, Organization, RoleDefinition } from '../types';
 import { User, Shield, Briefcase, Plus, X, Save, Settings, Trash2, Edit2, Key, RefreshCw, Building2, ChevronRight, LogIn, ArrowLeft } from 'lucide-react';
@@ -360,7 +361,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin, users, onUpdateUsers, or
                                     <option value="Teacher">Teacher</option>
                                     <option value="Head of Year">Head of Year</option>
                                     <option value="DSL">DSL (Safeguarding Lead)</option>
-                                    <option value="Admin">Org Admin</option>
+                                    <option value="IT Admin">IT Admin</option>
                                 </>
                             )}
                         </select>
