@@ -12,10 +12,22 @@ export enum MeetingType {
 export type UserRole = 'Teacher' | 'Head of Year' | 'DSL' | 'Admin' | 'Super Admin' | string;
 
 export interface RolePermissions {
+    // Core Data Access
     canViewSafeguarding: boolean;
+    canManageSafeguarding: boolean; // Create/Edit/Delete cases
     canViewBehavior: boolean;
-    canEditBehavior: boolean;
+    canEditBehavior: boolean;       // Log incidents
+    
+    // Feature Access
+    canManageSeating: boolean;
+    canRunReports: boolean;
+    canExportData: boolean;         // Download CSVs/PDFs (GDPR risk)
+    
+    // Admin
     canManageUsers: boolean;
+    canConfigureSystem: boolean;    // AI Settings, Integrations
+    
+    // View Configuration (Class Manager)
     classManager: {
         showRiskAnalysis: boolean;
         showBehaviorTrends: boolean;

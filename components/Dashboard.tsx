@@ -58,12 +58,12 @@ const Dashboard: React.FC<DashboardProps> = ({ logs, safeguardingCases, behaviou
       }
   };
 
-  // Auto-run Sentinel for Leaders on mount
+  // Auto-run Sentinel for Leaders on mount and whenever data updates (logs or behavior)
   useEffect(() => {
-      if (isLeader && !hasScanned) {
+      if (isLeader) {
           handleRunSentinel(true);
       }
-  }, [isLeader]);
+  }, [isLeader, logs, behaviourEntries]);
 
   // --- Common Stats ---
   const totalMeetings = logs.length;
@@ -242,7 +242,7 @@ const Dashboard: React.FC<DashboardProps> = ({ logs, safeguardingCases, behaviou
                             <Zap className="text-indigo-400" size={24} />
                             <h2 className="text-xl font-bold text-white tracking-wide">Predictive Safeguarding Sentinel</h2>
                             <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-bold uppercase tracking-wider flex items-center">
-                                <Activity size={10} className="mr-1" /> Auto-Pilot Active
+                                <Activity size={10} className="mr-1" /> Monitoring Live
                             </span>
                         </div>
                         <p className="text-slate-400 text-sm">
@@ -263,7 +263,7 @@ const Dashboard: React.FC<DashboardProps> = ({ logs, safeguardingCases, behaviou
                         <button 
                             onClick={() => handleRunSentinel(false)}
                             disabled={isScanning}
-                            className={`ml-2 p-2 rounded-lg transition-colors ${isScanning ? 'bg-indigo-900 text-indigo-400' : 'bg-indigo-600 hover:bg-indigo-500 text-white'}`}
+                            className={`ml-2 p-2 rounded-lg transition-colors ${isScanning ? 'bg-indigo-900 text-indigo-400' : 'bg-indigo-600 hover:bg-indigo-50 text-white'}`}
                             title="Run Manual Scan"
                         >
                             {isScanning ? <Loader2 size={18} className="animate-spin" /> : <Clock size={18} />}
@@ -281,7 +281,7 @@ const Dashboard: React.FC<DashboardProps> = ({ logs, safeguardingCases, behaviou
                 {hasScanned && riskAlerts.length === 0 && !scanError && (
                     <div className="bg-emerald-900/20 rounded-lg p-4 border border-emerald-500/30 flex items-center text-emerald-400">
                         <Shield size={20} className="mr-3" />
-                        <span className="font-medium">System Clear. No elevated risk patterns detected in the last 24h.</span>
+                        <span className="font-medium">System Clear. No elevated risk patterns detected in current data.</span>
                     </div>
                 )}
 
@@ -369,7 +369,7 @@ const Dashboard: React.FC<DashboardProps> = ({ logs, safeguardingCases, behaviou
                              <div className="flex items-center">
                                 <span className={`px-2.5 py-1 text-[10px] font-bold uppercase rounded-full border shadow-sm ${
                                   c.generatedReport.riskLevel === 'Critical' 
-                                    ? 'bg-red-500 text-white border-red-600' 
+                                    ? 'bg-red-50 text-white border-red-600' 
                                     : 'bg-orange-100 text-orange-700 border-orange-200'
                                 }`}>
                                     {c.generatedReport.riskLevel} Risk

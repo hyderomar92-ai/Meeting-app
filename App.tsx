@@ -47,23 +47,78 @@ const DEFAULT_ORGS: Organization[] = [
 const DEFAULT_ROLES: RoleDefinition[] = [
     {
         id: 'role-admin', name: 'Admin', isSystem: true,
-        permissions: { canViewSafeguarding: true, canViewBehavior: true, canEditBehavior: true, canManageUsers: true, classManager: { showRiskAnalysis: true, showBehaviorTrends: true, showStudentRoster: true, showActivityFeed: true } }
+        permissions: { 
+            canViewSafeguarding: true, 
+            canManageSafeguarding: true,
+            canViewBehavior: true, 
+            canEditBehavior: true, 
+            canManageSeating: true,
+            canRunReports: true,
+            canExportData: true,
+            canManageUsers: true, 
+            canConfigureSystem: true,
+            classManager: { showRiskAnalysis: true, showBehaviorTrends: true, showStudentRoster: true, showActivityFeed: true } 
+        }
     },
     {
         id: 'role-dsl', name: 'DSL', isSystem: true,
-        permissions: { canViewSafeguarding: true, canViewBehavior: true, canEditBehavior: true, canManageUsers: true, classManager: { showRiskAnalysis: true, showBehaviorTrends: true, showStudentRoster: true, showActivityFeed: true } }
+        permissions: { 
+            canViewSafeguarding: true, 
+            canManageSafeguarding: true,
+            canViewBehavior: true, 
+            canEditBehavior: true, 
+            canManageSeating: false,
+            canRunReports: true,
+            canExportData: true,
+            canManageUsers: true, 
+            canConfigureSystem: false,
+            classManager: { showRiskAnalysis: true, showBehaviorTrends: true, showStudentRoster: true, showActivityFeed: true } 
+        }
     },
     {
         id: 'role-hoy', name: 'Head of Year', isSystem: true,
-        permissions: { canViewSafeguarding: true, canViewBehavior: true, canEditBehavior: true, canManageUsers: false, classManager: { showRiskAnalysis: true, showBehaviorTrends: true, showStudentRoster: true, showActivityFeed: true } }
+        permissions: { 
+            canViewSafeguarding: true, 
+            canManageSafeguarding: false, // View only
+            canViewBehavior: true, 
+            canEditBehavior: true, 
+            canManageSeating: true,
+            canRunReports: true,
+            canExportData: false,
+            canManageUsers: false, 
+            canConfigureSystem: false,
+            classManager: { showRiskAnalysis: true, showBehaviorTrends: true, showStudentRoster: true, showActivityFeed: true } 
+        }
     },
     {
         id: 'role-teacher', name: 'Teacher', isSystem: true,
-        permissions: { canViewSafeguarding: false, canViewBehavior: true, canEditBehavior: true, canManageUsers: false, classManager: { showRiskAnalysis: false, showBehaviorTrends: true, showStudentRoster: true, showActivityFeed: true } }
+        permissions: { 
+            canViewSafeguarding: false, 
+            canManageSafeguarding: false,
+            canViewBehavior: true, 
+            canEditBehavior: true, 
+            canManageSeating: true,
+            canRunReports: false,
+            canExportData: false,
+            canManageUsers: false, 
+            canConfigureSystem: false,
+            classManager: { showRiskAnalysis: false, showBehaviorTrends: true, showStudentRoster: true, showActivityFeed: true } 
+        }
     },
     {
         id: 'role-super', name: 'Super Admin', isSystem: true,
-        permissions: { canViewSafeguarding: true, canViewBehavior: true, canEditBehavior: true, canManageUsers: true, classManager: { showRiskAnalysis: true, showBehaviorTrends: true, showStudentRoster: true, showActivityFeed: true } }
+        permissions: { 
+            canViewSafeguarding: true, 
+            canManageSafeguarding: true,
+            canViewBehavior: true, 
+            canEditBehavior: true, 
+            canManageSeating: true,
+            canRunReports: true,
+            canExportData: true,
+            canManageUsers: true, 
+            canConfigureSystem: true,
+            classManager: { showRiskAnalysis: true, showBehaviorTrends: true, showStudentRoster: true, showActivityFeed: true } 
+        }
     }
 ];
 
