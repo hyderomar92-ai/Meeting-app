@@ -1,17 +1,20 @@
 
 import React, { useState, useEffect } from 'react';
-import { UserProfile, Device, SupportTicket, SyncLog } from '../types';
+import { UserProfile, Device, SupportTicket, SyncLog, RoleDefinition } from '../types';
 import { 
     Server, Wifi, Users, Monitor, Ticket, AlertCircle, CheckCircle2, 
     RefreshCw, Search, Plus, Edit2, Trash2, Lock, Laptop, Tablet, 
-    Database, KeyRound, Activity, Mail, FileUp, Network, Shield
+    Database, KeyRound, Activity, Mail, FileUp, Network, Shield,
+    UserCog, ToggleLeft, ToggleRight
 } from 'lucide-react';
 
 interface OrgAdminSettingsProps {
   currentUser: UserProfile;
   users: UserProfile[];
   onUpdateUsers: (users: UserProfile[]) => void;
-  initialTab?: 'OVERVIEW' | 'IAM' | 'ASSETS' | 'HELPDESK' | 'DATA';
+  roles: RoleDefinition[];
+  onUpdateRoles: (roles: RoleDefinition[]) => void;
+  initialTab?: 'OVERVIEW' | 'IAM' | 'ROLES' | 'ASSETS' | 'HELPDESK' | 'DATA';
 }
 
 // Mock Data
@@ -35,8 +38,8 @@ const MOCK_SYNC_LOGS: SyncLog[] = [
     { id: 's4', system: 'Arbor', status: 'Failed', recordsProcessed: 0, timestamp: '2023-11-20 14:00:00', message: 'API Timeout' },
 ];
 
-const OrgAdminSettings: React.FC<OrgAdminSettingsProps> = ({ currentUser, users, onUpdateUsers, initialTab = 'OVERVIEW' }) => {
-  const [activeTab, setActiveTab] = useState<'OVERVIEW' | 'IAM' | 'ASSETS' | 'HELPDESK' | 'DATA'>(initialTab);
+const OrgAdminSettings: React.FC<OrgAdminSettingsProps> = ({ currentUser, users, onUpdateUsers, roles, onUpdateRoles, initialTab = 'OVERVIEW' }) => {
+  const [activeTab, setActiveTab] = useState<'OVERVIEW' | 'IAM' | 'ROLES' | 'ASSETS' | 'HELPDESK' | 'DATA'>(initialTab);
   
   useEffect(() => {
       setActiveTab(initialTab);
@@ -46,6 +49,10 @@ const OrgAdminSettings: React.FC<OrgAdminSettingsProps> = ({ currentUser, users,
   const [userSearch, setUserSearch] = useState('');
   const [showUserModal, setShowUserModal] = useState(false);
   const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
+
+  // Role Management State
+  const [showRoleModal, setShowRoleModal] = useState(false);
+  const [editingRole, setEditingRole] = useState<RoleDefinition | null>(null);
 
   // Asset State
   const [devices, setDevices] = useState<Device[]>(MOCK_DEVICES);
@@ -86,6 +93,49 @@ const OrgAdminSettings: React.FC<OrgAdminSettingsProps> = ({ currentUser, users,
       }
       setShowUserModal(false);
       setEditingUser(null);
+  };
+
+  // --- Role Handlers ---
+  const handleSaveRole = (e: React.FormEvent) => {
+      e.preventDefault();
+      const form = e.target as HTMLFormElement;
+      const formData = new FormData(form);
+      const name = formData.get('name') as string;
+      
+      // Permissions Construction
+      const permissions = {
+          canViewSafeguarding: formData.get('perm_safeguarding') === 'on',
+          canViewBehavior: formData.get('perm_behavior') === 'on',
+          canEditBehavior: formData.get('perm_edit_behavior') === 'on',
+          canManageUsers: formData.get('perm_users') === 'on',
+          classManager: {
+              showRiskAnalysis: formData.get('cm_risk') === 'on',
+              showBehaviorTrends: formData.get('cm_trends') === 'on',
+              showStudentRoster: formData.get('cm_roster') === 'on',
+              showActivityFeed: formData.get('cm_activity') === 'on',
+          }
+      };
+
+      if (editingRole) {
+          onUpdateRoles(roles.map(r => r.id === editingRole.id ? { ...r, name, permissions } : r));
+      } else {
+          const newRole: RoleDefinition = {
+              id: crypto.randomUUID(),
+              name,
+              isSystem: false,
+              permissions,
+              orgId: currentUser.orgId
+          };
+          onUpdateRoles([...roles, newRole]);
+      }
+      setShowRoleModal(false);
+      setEditingRole(null);
+  };
+
+  const handleDeleteRole = (roleId: string) => {
+      if(window.confirm('Delete this role? Users assigned to this role will lose permissions.')) {
+          onUpdateRoles(roles.filter(r => r.id !== roleId));
+      }
   };
 
   const handleResetPassword = (userId: string) => {
@@ -148,7 +198,7 @@ const OrgAdminSettings: React.FC<OrgAdminSettingsProps> = ({ currentUser, users,
         </div>
       </header>
 
-      {/* Navigation Tabs - Now purely visual indicators if controlled by sidebar, or clickable if standalone */}
+      {/* Navigation Tabs */}
       <div className="flex border-b border-slate-200 overflow-x-auto bg-white rounded-t-xl px-2">
           <button 
             onClick={() => setActiveTab('OVERVIEW')}
@@ -161,6 +211,12 @@ const OrgAdminSettings: React.FC<OrgAdminSettingsProps> = ({ currentUser, users,
             className={`px-6 py-3 text-sm font-bold border-b-2 transition-colors flex items-center whitespace-nowrap ${activeTab === 'IAM' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
           >
               <Users size={16} className="mr-2" /> Users & IAM
+          </button>
+          <button 
+            onClick={() => setActiveTab('ROLES')}
+            className={`px-6 py-3 text-sm font-bold border-b-2 transition-colors flex items-center whitespace-nowrap ${activeTab === 'ROLES' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+          >
+              <UserCog size={16} className="mr-2" /> Roles & Permissions
           </button>
           <button 
             onClick={() => setActiveTab('DATA')}
@@ -336,6 +392,72 @@ const OrgAdminSettings: React.FC<OrgAdminSettingsProps> = ({ currentUser, users,
                       ))}
                   </tbody>
               </table>
+          </div>
+      )}
+
+      {/* --- ROLES TAB --- */}
+      {activeTab === 'ROLES' && (
+          <div className="space-y-6">
+              <div className="flex justify-between items-center bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                  <div>
+                      <h3 className="font-bold text-slate-800">Role Definitions</h3>
+                      <p className="text-sm text-slate-500">Customize permissions for each user type.</p>
+                  </div>
+                  <button 
+                    onClick={() => { setEditingRole(null); setShowRoleModal(true); }}
+                    className="flex items-center px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-bold text-sm transition-colors shadow-sm"
+                  >
+                      <Plus size={16} className="mr-2" /> Add Custom Role
+                  </button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {roles.map(role => (
+                      <div key={role.id} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col hover:shadow-md transition-shadow">
+                          <div className="p-4 border-b border-slate-100 bg-slate-50 flex justify-between items-start">
+                              <div>
+                                  <h3 className="font-bold text-slate-800">{role.name}</h3>
+                                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${role.isSystem ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'}`}>
+                                      {role.isSystem ? 'System Default' : 'Custom Role'}
+                                  </span>
+                              </div>
+                              <div className="flex space-x-1">
+                                  <button onClick={() => { setEditingRole(role); setShowRoleModal(true); }} className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-white rounded transition-colors"><Edit2 size={14}/></button>
+                                  {!role.isSystem && (
+                                      <button onClick={() => handleDeleteRole(role.id)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-white rounded transition-colors"><Trash2 size={14}/></button>
+                                  )}
+                              </div>
+                          </div>
+                          <div className="p-4 space-y-2 flex-1 text-sm text-slate-600">
+                              <div className="flex items-center gap-2">
+                                  {role.permissions.canViewSafeguarding ? <CheckCircle2 size={14} className="text-green-500"/> : <Lock size={14} className="text-slate-300"/>}
+                                  <span>View Safeguarding</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                  {role.permissions.canViewBehavior ? <CheckCircle2 size={14} className="text-green-500"/> : <Lock size={14} className="text-slate-300"/>}
+                                  <span>View Behavior</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                  {role.permissions.canEditBehavior ? <CheckCircle2 size={14} className="text-green-500"/> : <Lock size={14} className="text-slate-300"/>}
+                                  <span>Log Incidents</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                  {role.permissions.canManageUsers ? <CheckCircle2 size={14} className="text-green-500"/> : <Lock size={14} className="text-slate-300"/>}
+                                  <span className="font-medium text-slate-700">Access IT Console</span>
+                              </div>
+                              <div className="mt-2 pt-2 border-t border-slate-100">
+                                  <p className="text-xs font-bold text-slate-400 uppercase mb-1">Class Manager Visibility</p>
+                                  <div className="grid grid-cols-2 gap-y-1 text-xs">
+                                      <span className={role.permissions.classManager.showRiskAnalysis ? 'text-indigo-600 font-medium' : 'text-slate-400 line-through'}>Risk Charts</span>
+                                      <span className={role.permissions.classManager.showBehaviorTrends ? 'text-indigo-600 font-medium' : 'text-slate-400 line-through'}>Trends</span>
+                                      <span className={role.permissions.classManager.showStudentRoster ? 'text-indigo-600 font-medium' : 'text-slate-400 line-through'}>Roster</span>
+                                      <span className={role.permissions.classManager.showActivityFeed ? 'text-indigo-600 font-medium' : 'text-slate-400 line-through'}>Activity</span>
+                                  </div>
+                              </div>
+                          </div>
+                      </div>
+                  ))}
+              </div>
           </div>
       )}
 
@@ -541,15 +663,90 @@ const OrgAdminSettings: React.FC<OrgAdminSettingsProps> = ({ currentUser, users,
                       <div>
                           <label className="block text-sm font-medium text-slate-700 mb-1">Role</label>
                           <select name="role" defaultValue={editingUser?.role || 'Teacher'} className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 bg-white">
-                              <option value="Teacher">Teacher</option>
-                              <option value="Head of Year">Head of Year</option>
-                              <option value="DSL">DSL (Safeguarding)</option>
-                              <option value="Admin">IT / Admin</option>
+                              {roles.map(r => (
+                                  <option key={r.id} value={r.name}>{r.name}</option>
+                              ))}
                           </select>
                       </div>
                       <div className="flex justify-end gap-3 pt-4 border-t border-slate-100 mt-4">
                           <button type="button" onClick={() => setShowUserModal(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg font-medium">Cancel</button>
                           <button type="submit" className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 shadow-md">Save Identity</button>
+                      </div>
+                  </form>
+              </div>
+          </div>
+      )}
+
+      {/* Role Modal */}
+      {showRoleModal && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+              <div className="bg-white rounded-xl shadow-xl max-w-lg w-full p-6 animate-slide-up flex flex-col max-h-[90vh]">
+                  <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center">
+                      <UserCog className="mr-2 text-indigo-600" />
+                      {editingRole ? 'Edit Role Permissions' : 'Create Custom Role'}
+                  </h3>
+                  
+                  <form onSubmit={handleSaveRole} className="space-y-4 overflow-y-auto pr-2 custom-scrollbar">
+                      <div>
+                          <label className="block text-sm font-bold text-slate-700 mb-1">Role Name</label>
+                          <input name="name" defaultValue={editingRole?.name} required placeholder="e.g. Teaching Assistant" className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500" />
+                      </div>
+
+                      <div className="space-y-4 pt-2">
+                          <h4 className="text-xs font-bold text-slate-400 uppercase border-b border-slate-100 pb-2">Global Access</h4>
+                          <label className="flex items-center justify-between cursor-pointer">
+                              <span className="text-sm font-medium text-slate-700">View Safeguarding Data</span>
+                              <input type="checkbox" name="perm_safeguarding" defaultChecked={editingRole?.permissions.canViewSafeguarding} className="w-4 h-4 text-indigo-600 rounded" />
+                          </label>
+                          <label className="flex items-center justify-between cursor-pointer">
+                              <span className="text-sm font-medium text-slate-700">View Behavior Data</span>
+                              <input type="checkbox" name="perm_behavior" defaultChecked={editingRole?.permissions.canViewBehavior} className="w-4 h-4 text-indigo-600 rounded" />
+                          </label>
+                          <label className="flex items-center justify-between cursor-pointer">
+                              <span className="text-sm font-medium text-slate-700">Log Behavior/Incidents</span>
+                              <input type="checkbox" name="perm_edit_behavior" defaultChecked={editingRole?.permissions.canEditBehavior} className="w-4 h-4 text-indigo-600 rounded" />
+                          </label>
+                          <label className="flex items-center justify-between cursor-pointer">
+                              <span className="text-sm font-medium text-slate-700">Manage Users & Access IT Console</span>
+                              <input type="checkbox" name="perm_users" defaultChecked={editingRole?.permissions.canManageUsers} className="w-4 h-4 text-indigo-600 rounded" />
+                          </label>
+                      </div>
+
+                      <div className="space-y-4 pt-4">
+                          <h4 className="text-xs font-bold text-slate-400 uppercase border-b border-slate-100 pb-2">Class Manager View</h4>
+                          <label className="flex items-center justify-between cursor-pointer">
+                              <div className="flex items-center">
+                                  {editingRole?.permissions.classManager.showRiskAnalysis ? <ToggleRight className="text-indigo-600 mr-2"/> : <ToggleLeft className="text-slate-300 mr-2"/>}
+                                  <span className="text-sm font-medium text-slate-700">Risk Analysis Charts</span>
+                              </div>
+                              <input type="checkbox" name="cm_risk" defaultChecked={editingRole?.permissions.classManager.showRiskAnalysis} className="hidden" />
+                          </label>
+                          <label className="flex items-center justify-between cursor-pointer">
+                              <div className="flex items-center">
+                                  {editingRole?.permissions.classManager.showBehaviorTrends ? <ToggleRight className="text-indigo-600 mr-2"/> : <ToggleLeft className="text-slate-300 mr-2"/>}
+                                  <span className="text-sm font-medium text-slate-700">Behavior Trends</span>
+                              </div>
+                              <input type="checkbox" name="cm_trends" defaultChecked={editingRole?.permissions.classManager.showBehaviorTrends} className="hidden" />
+                          </label>
+                          <label className="flex items-center justify-between cursor-pointer">
+                              <div className="flex items-center">
+                                  {editingRole?.permissions.classManager.showStudentRoster ? <ToggleRight className="text-indigo-600 mr-2"/> : <ToggleLeft className="text-slate-300 mr-2"/>}
+                                  <span className="text-sm font-medium text-slate-700">Student Roster</span>
+                              </div>
+                              <input type="checkbox" name="cm_roster" defaultChecked={editingRole?.permissions.classManager.showStudentRoster} className="hidden" />
+                          </label>
+                          <label className="flex items-center justify-between cursor-pointer">
+                              <div className="flex items-center">
+                                  {editingRole?.permissions.classManager.showActivityFeed ? <ToggleRight className="text-indigo-600 mr-2"/> : <ToggleLeft className="text-slate-300 mr-2"/>}
+                                  <span className="text-sm font-medium text-slate-700">Activity Feed</span>
+                              </div>
+                              <input type="checkbox" name="cm_activity" defaultChecked={editingRole?.permissions.classManager.showActivityFeed} className="hidden" />
+                          </label>
+                      </div>
+
+                      <div className="flex justify-end gap-3 pt-6 border-t border-slate-100 mt-4">
+                          <button type="button" onClick={() => setShowRoleModal(false)} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg font-medium">Cancel</button>
+                          <button type="submit" className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 shadow-md">Save Role Config</button>
                       </div>
                   </form>
               </div>

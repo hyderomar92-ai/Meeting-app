@@ -1,15 +1,16 @@
 
 import React, { useState, useMemo } from 'react';
-import { UserProfile } from '../types';
+import { UserProfile, RoleDefinition } from '../types';
 import { Search, User, Plus, Edit2, Trash2, Lock, Unlock, KeyRound, Power, Link, CheckCircle2, X, Save, Mail, Shield, Layers } from 'lucide-react';
 import { STUDENTS } from '../data/students';
 
 interface SuperAdminUserManagementProps {
   users: UserProfile[];
   onUpdateUsers: (users: UserProfile[]) => void;
+  roles?: RoleDefinition[];
 }
 
-const SuperAdminUserManagement: React.FC<SuperAdminUserManagementProps> = ({ users, onUpdateUsers }) => {
+const SuperAdminUserManagement: React.FC<SuperAdminUserManagementProps> = ({ users, onUpdateUsers, roles = [] }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -32,6 +33,22 @@ const SuperAdminUserManagement: React.FC<SuperAdminUserManagementProps> = ({ use
     u.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     u.role.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  // Use dynamic roles or default if empty
+  const roleOptions = useMemo(() => {
+      if (roles.length > 0) {
+          // Filter to show system roles + potentially any roles relevant to context if available
+          // For Super Admin global view, showing System Roles is safest default
+          return roles.filter(r => r.isSystem);
+      }
+      return [
+          { id: 'def-t', name: 'Teacher' },
+          { id: 'def-hoy', name: 'Head of Year' },
+          { id: 'def-dsl', name: 'DSL' },
+          { id: 'def-admin', name: 'Admin' },
+          { id: 'def-super', name: 'Super Admin' }
+      ];
+  }, [roles]);
 
   // CRUD Handlers
   const handleSaveUser = (e: React.FormEvent) => {
@@ -324,11 +341,9 @@ const SuperAdminUserManagement: React.FC<SuperAdminUserManagementProps> = ({ use
                             onChange={(e) => setSelectedRole(e.target.value)} 
                             className="w-full px-3 py-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
                           >
-                              <option value="Teacher">Teacher</option>
-                              <option value="Head of Year">Head of Year</option>
-                              <option value="DSL">DSL</option>
-                              <option value="Admin">Admin</option>
-                              <option value="Super Admin">Super Admin</option>
+                              {roleOptions.map(r => (
+                                  <option key={r.id} value={r.name}>{r.name}</option>
+                              ))}
                           </select>
                       </div>
                       <div>

@@ -1,18 +1,19 @@
 
 import React, { useState } from 'react';
-import { UserProfile, SystemAnnouncement } from '../types';
+import { UserProfile, SystemAnnouncement, RoleDefinition } from '../types';
 import { User, Search, Unlock, KeyRound, Link, Power, MessageSquare, Plus, Trash2, Tag, AlertTriangle, Bell, CheckCircle2, X } from 'lucide-react';
 import SuperAdminUserManagement from './SuperAdminUserManagement';
 
 interface SuperAdminOperationsProps {
   allUsers: UserProfile[];
   onUpdateUsers: (users: UserProfile[]) => void;
+  roles?: RoleDefinition[];
 }
 
 const DEFAULT_INCIDENT_TYPES = ['Bullying', 'Physical Abuse', 'Sexual Harassment', 'Online Safety', 'Substance Misuse', 'Neglect', 'Radicalization'];
 const DEFAULT_BEHAVIOR_TYPES = ['Disruption', 'Homework', 'Lateness', 'Uniform', 'Equipment', 'Defiance', 'Truancy'];
 
-const SuperAdminOperations: React.FC<SuperAdminOperationsProps> = ({ allUsers, onUpdateUsers }) => {
+const SuperAdminOperations: React.FC<SuperAdminOperationsProps> = ({ allUsers, onUpdateUsers, roles = [] }) => {
   const [activeTab, setActiveTab] = useState<'SUPPORT' | 'MASTER_DATA' | 'COMMUNICATION'>('SUPPORT');
   
   // MASTER DATA STATE
@@ -80,7 +81,7 @@ const SuperAdminOperations: React.FC<SuperAdminOperationsProps> = ({ allUsers, o
 
         {/* USER SUPPORT TAB */}
         {activeTab === 'SUPPORT' && (
-            <SuperAdminUserManagement users={allUsers} onUpdateUsers={onUpdateUsers} />
+            <SuperAdminUserManagement users={allUsers} onUpdateUsers={onUpdateUsers} roles={roles} />
         )}
 
         {/* MASTER DATA TAB */}

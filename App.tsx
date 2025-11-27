@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { ViewState, MeetingLog, MeetingType, SafeguardingCase, UserProfile, BehaviourEntry, Organization, UserRole, SeatingLayout } from './types';
+import { ViewState, MeetingLog, MeetingType, SafeguardingCase, UserProfile, BehaviourEntry, Organization, UserRole, SeatingLayout, RoleDefinition } from './types';
 import Dashboard from './components/Dashboard';
 import MeetingForm from './components/MeetingForm';
 import HistoryView from './components/HistoryView';
@@ -43,6 +43,30 @@ const DEFAULT_ORGS: Organization[] = [
     }
 ];
 
+// Initialize Roles with Permissions
+const DEFAULT_ROLES: RoleDefinition[] = [
+    {
+        id: 'role-admin', name: 'Admin', isSystem: true,
+        permissions: { canViewSafeguarding: true, canViewBehavior: true, canEditBehavior: true, canManageUsers: true, classManager: { showRiskAnalysis: true, showBehaviorTrends: true, showStudentRoster: true, showActivityFeed: true } }
+    },
+    {
+        id: 'role-dsl', name: 'DSL', isSystem: true,
+        permissions: { canViewSafeguarding: true, canViewBehavior: true, canEditBehavior: true, canManageUsers: true, classManager: { showRiskAnalysis: true, showBehaviorTrends: true, showStudentRoster: true, showActivityFeed: true } }
+    },
+    {
+        id: 'role-hoy', name: 'Head of Year', isSystem: true,
+        permissions: { canViewSafeguarding: true, canViewBehavior: true, canEditBehavior: true, canManageUsers: false, classManager: { showRiskAnalysis: true, showBehaviorTrends: true, showStudentRoster: true, showActivityFeed: true } }
+    },
+    {
+        id: 'role-teacher', name: 'Teacher', isSystem: true,
+        permissions: { canViewSafeguarding: false, canViewBehavior: true, canEditBehavior: true, canManageUsers: false, classManager: { showRiskAnalysis: false, showBehaviorTrends: true, showStudentRoster: true, showActivityFeed: true } }
+    },
+    {
+        id: 'role-super', name: 'Super Admin', isSystem: true,
+        permissions: { canViewSafeguarding: true, canViewBehavior: true, canEditBehavior: true, canManageUsers: true, classManager: { showRiskAnalysis: true, showBehaviorTrends: true, showStudentRoster: true, showActivityFeed: true } }
+    }
+];
+
 const DEFAULT_USERS: UserProfile[] = [
   { id: 'u0', name: 'System Owner', role: 'Super Admin', initials: 'SO', status: 'Active' },
   { id: 'u1', name: 'Jane Doe', role: 'Head of Year', initials: 'JD', orgId: 'org-1', status: 'Active', allowedYearGroups: ['07', '08'] },
@@ -63,6 +87,13 @@ const App: React.FC = () => {
           const saved = localStorage.getItem('sentinel_users');
           return saved ? JSON.parse(saved) : DEFAULT_USERS;
       } catch (e) { return DEFAULT_USERS; }
+  });
+
+  const [roles, setRoles] = useState<RoleDefinition[]>(() => {
+      try {
+          const saved = localStorage.getItem('sentinel_roles');
+          return saved ? JSON.parse(saved) : DEFAULT_ROLES;
+      } catch (e) { return DEFAULT_ROLES; }
   });
 
   const [organizations, setOrganizations] = useState<Organization[]>(() => {
@@ -95,6 +126,7 @@ const App: React.FC = () => {
 
   // --- Persistence Effects ---
   useEffect(() => { localStorage.setItem('sentinel_users', JSON.stringify(allUsers)); }, [allUsers]);
+  useEffect(() => { localStorage.setItem('sentinel_roles', JSON.stringify(roles)); }, [roles]);
   useEffect(() => { localStorage.setItem('sentinel_orgs', JSON.stringify(organizations)); }, [organizations]);
   useEffect(() => { localStorage.setItem('sentinel_logs', JSON.stringify(allLogs)); }, [allLogs]);
   useEffect(() => { localStorage.setItem('sentinel_safeguarding', JSON.stringify(allSafeguarding)); }, [allSafeguarding]);
@@ -102,18 +134,14 @@ const App: React.FC = () => {
 
   // --- Multi-Tenancy Filtering ---
   // Filter data based on the logged-in user's Organization ID.
-  // Super Admins see data if they impersonate, otherwise they see aggregate stats in their dashboard.
   const tenantData = useMemo(() => {
       if (!currentUser || currentUser.role === 'Super Admin') {
-          // Super Admins usually view the Dashboard or Tenant Manager. 
-          // If they need to see specific data, they should "Impersonate".
-          // For safety, we return everything if they are Super Admin to prevent empty views in generic components,
-          // but logically they operate on a higher level.
           return {
               logs: allLogs,
               safeguarding: allSafeguarding,
               behavior: allBehavior,
-              users: allUsers
+              users: allUsers,
+              roles: roles
           };
       }
 
@@ -122,9 +150,10 @@ const App: React.FC = () => {
           logs: allLogs.filter(l => l.orgId === orgId),
           safeguarding: allSafeguarding.filter(s => s.orgId === orgId),
           behavior: allBehavior.filter(b => b.orgId === orgId),
-          users: allUsers.filter(u => u.orgId === orgId)
+          users: allUsers.filter(u => u.orgId === orgId),
+          roles: roles.filter(r => r.isSystem || r.orgId === orgId) // Show system roles + org roles
       };
-  }, [currentUser, allLogs, allSafeguarding, allBehavior, allUsers]);
+  }, [currentUser, allLogs, allSafeguarding, allBehavior, allUsers, roles]);
 
 
   // --- Actions ---
@@ -152,7 +181,6 @@ const App: React.FC = () => {
   // --- Data Modifiers ---
 
   const handleSaveLog = (newLog: MeetingLog) => {
-    // Attach current Tenant ID to the record
     const logWithTenant = { ...newLog, orgId: currentUser?.orgId };
     setAllLogs(prev => [logWithTenant, ...prev]);
     handleNavigate('HISTORY');
@@ -242,6 +270,7 @@ const App: React.FC = () => {
                 localStorage.clear();
                 window.location.reload();
             }}
+            roles={roles} // Pass roles to login for creating new users with correct role options
         />
     );
   }
@@ -253,6 +282,7 @@ const App: React.FC = () => {
         onNavigate={handleNavigate} 
         onLogout={handleLogout}
         currentUser={currentUser}
+        roles={roles}
       />
       
       <main className="flex-1 overflow-y-auto p-4 md:p-8 custom-scrollbar relative">
@@ -276,12 +306,7 @@ const App: React.FC = () => {
               currentUser={currentUser}
               initialAttendees={selectedStudent ? [selectedStudent] : []}
               onEscalate={(data) => {
-                  setSelectedStudent(data.studentName); // Pre-select for SB
-                  // Pass initial data logic handled by SB viewing 'NEW' + props? 
-                  // For simplicity, we navigate to SAFEGUARDING and could pass state, 
-                  // but here we rely on the user to select 'New Case' or modify SB to accept props.
-                  // Ideally: <SafeguardingBuilder initialData={data} ... /> 
-                  // We'll set a temporary 'draft' state or just navigate for now.
+                  setSelectedStudent(data.studentName);
                   handleNavigate('SAFEGUARDING');
               }}
             />
@@ -300,7 +325,6 @@ const App: React.FC = () => {
                 onSelectStudent={(name) => handleNavigate('STUDENT_PROFILE', name)}
                 onQuickLog={(name) => handleNavigate('NEW_LOG', name)}
                 safeguardingCases={tenantData.safeguarding}
-                userScope={currentUser.allowedYearGroups}
             />
           )}
 
@@ -311,6 +335,7 @@ const App: React.FC = () => {
                 safeguardingCases={tenantData.safeguarding}
                 onNavigateToStudent={(name) => handleNavigate('STUDENT_PROFILE', name)}
                 currentUser={currentUser}
+                roles={roles} // Pass global role definitions for permission checks
             />
           )}
           
@@ -369,9 +394,27 @@ const App: React.FC = () => {
                   currentUser={currentUser}
                   users={tenantData.users}
                   onUpdateUsers={(updated) => {
-                      // Filter out updates for this org and merge with global
                       const otherUsers = allUsers.filter(u => u.orgId !== currentUser.orgId);
                       setAllUsers([...otherUsers, ...updated]);
+                  }}
+                  roles={tenantData.roles}
+                  onUpdateRoles={(updatedRoles) => {
+                      const otherRoles = roles.filter(r => r.orgId !== currentUser.orgId && !r.isSystem);
+                      // Merge system roles (which are shared but filtered in tenantData) is tricky.
+                      // Simplified: We overwrite tenant-specific roles and keep system ones.
+                      // For this demo, let's just update global state carefully.
+                      const newGlobalRoles = roles.map(r => {
+                          const updated = updatedRoles.find(ur => ur.id === r.id);
+                          return updated || r;
+                      });
+                      
+                      // Add any completely new roles
+                      updatedRoles.forEach(ur => {
+                          if(!roles.find(r => r.id === ur.id)) {
+                              newGlobalRoles.push(ur);
+                          }
+                      });
+                      setRoles(newGlobalRoles);
                   }}
               />
           )}
@@ -382,7 +425,7 @@ const App: React.FC = () => {
           {currentView === 'SUPER_ADMIN_AI' && <SuperAdminAIMonitor organizations={organizations} />}
           {currentView === 'SUPER_ADMIN_SECURITY' && <SuperAdminSecurity />}
           {currentView === 'SUPER_ADMIN_TOOLS' && <SuperAdminTools />}
-          {currentView === 'SUPER_ADMIN_OPS' && <SuperAdminOperations allUsers={allUsers} onUpdateUsers={setAllUsers} />}
+          {currentView === 'SUPER_ADMIN_OPS' && <SuperAdminOperations allUsers={allUsers} onUpdateUsers={setAllUsers} roles={roles} />}
           {currentView === 'SUPER_ADMIN_SUBSCRIPTIONS' && <SuperAdminSubscriptions />}
           {currentView === 'SUPER_ADMIN_INTEGRATIONS' && <SuperAdminIntegrations />}
           {currentView === 'SUPER_ADMIN_DATA' && <SuperAdminData organizations={organizations} />}

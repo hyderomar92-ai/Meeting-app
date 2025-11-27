@@ -1,6 +1,6 @@
 
-import React from 'react';
-import { ViewState, UserProfile } from '../types';
+import React, { useMemo } from 'react';
+import { ViewState, UserProfile, RoleDefinition } from '../types';
 import { 
   LayoutDashboard, 
   PlusCircle, 
@@ -32,12 +32,19 @@ interface SidebarProps {
   onNavigate: (view: ViewState, studentName?: string) => void;
   onLogout: () => void;
   currentUser: UserProfile;
+  roles?: RoleDefinition[];
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, onLogout, currentUser }) => {
+const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, onLogout, currentUser, roles = [] }) => {
   const { t } = useLanguage();
   const isSuperAdmin = currentUser.role === 'Super Admin';
-  const isOrgAdmin = currentUser.role === 'Admin';
+  
+  // Determine access based on role permissions
+  const canAccessAdminConfig = useMemo(() => {
+      if (currentUser.role === 'Admin') return true; // Backward compatibility
+      const userRoleDef = roles.find(r => r.name === currentUser.role);
+      return userRoleDef?.permissions?.canManageUsers || false;
+  }, [currentUser, roles]);
 
   const NavItem = ({ view, icon: Icon, label }: { view: ViewState; icon: any; label: string }) => (
     <button
@@ -93,7 +100,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, onLogout, cu
             <NavItem view="BEHAVIOUR" icon={BarChart2} label={t('nav.behaviour')} />
             <NavItem view="SEATING_PLAN" icon={Grid} label={t('nav.seating')} />
             <NavItem view="REPORTS" icon={FileText} label={t('nav.reports')} />
-            {isOrgAdmin && (
+            {canAccessAdminConfig && (
                <>
                  <div className="mb-2 px-4 text-xs font-bold text-slate-500 uppercase tracking-wider mt-6">
                     Admin Config

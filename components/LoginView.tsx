@@ -1,6 +1,5 @@
-
 import React, { useState, useMemo } from 'react';
-import { UserProfile, Organization } from '../types';
+import { UserProfile, Organization, RoleDefinition } from '../types';
 import { User, Shield, Briefcase, Plus, X, Save, Settings, Trash2, Edit2, Key, RefreshCw, Building2, ChevronRight, LogIn, ArrowLeft } from 'lucide-react';
 
 interface LoginViewProps {
@@ -10,6 +9,7 @@ interface LoginViewProps {
   organizations?: Organization[];
   onDeleteUserRequest?: (id: string) => void;
   onResetSystemRequest?: () => void;
+  roles?: RoleDefinition[];
 }
 
 interface ConfirmationState {
@@ -22,7 +22,7 @@ interface ConfirmationState {
 
 type LoginMode = 'ORG_SELECT' | 'USER_SELECT' | 'ADD' | 'EDIT';
 
-const LoginView: React.FC<LoginViewProps> = ({ onLogin, users, onUpdateUsers, organizations = [], onDeleteUserRequest, onResetSystemRequest }) => {
+const LoginView: React.FC<LoginViewProps> = ({ onLogin, users, onUpdateUsers, organizations = [], onDeleteUserRequest, onResetSystemRequest, roles = [] }) => {
   const [mode, setMode] = useState<LoginMode>('ORG_SELECT');
   const [selectedOrgId, setSelectedOrgId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -157,6 +157,14 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin, users, onUpdateUsers, or
           default: return <User size={14} className="text-blue-500" />;
       }
   };
+
+  // Filter roles based on selected organization
+  const availableRoles = useMemo(() => {
+      if (selectedOrgId === 'SUPER_ADMIN') {
+          return roles.filter(r => r.name === 'Super Admin');
+      }
+      return roles.filter(r => (r.isSystem || r.orgId === selectedOrgId) && r.name !== 'Super Admin');
+  }, [roles, selectedOrgId]);
 
   return (
     <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-4 relative overflow-hidden">
@@ -342,9 +350,12 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin, users, onUpdateUsers, or
                             onChange={(e) => setUserRole(e.target.value as any)}
                             className="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-indigo-500 outline-none bg-white cursor-pointer"
                         >
-                            {selectedOrgId === 'SUPER_ADMIN' ? (
-                                <option value="Super Admin">Super Admin</option>
+                            {availableRoles.length > 0 ? (
+                                availableRoles.map(r => (
+                                    <option key={r.id} value={r.name}>{r.name}</option>
+                                ))
                             ) : (
+                                // Fallback if no roles loaded
                                 <>
                                     <option value="Teacher">Teacher</option>
                                     <option value="Head of Year">Head of Year</option>
