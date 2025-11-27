@@ -22,16 +22,18 @@ import {
   Box,
   Settings2,
   Zap,
-  Shield
+  Shield,
+  User
 } from 'lucide-react';
 
 interface SeatingPlanViewProps {
   onSave?: (layout: SeatingLayout) => void;
   behaviourEntries?: BehaviourEntry[];
   safeguardingCases?: SafeguardingCase[];
+  onNavigateToStudent: (studentName: string) => void;
 }
 
-const SeatingPlanView: React.FC<SeatingPlanViewProps> = ({ onSave, behaviourEntries = [], safeguardingCases = [] }) => {
+const SeatingPlanView: React.FC<SeatingPlanViewProps> = ({ onSave, behaviourEntries = [], safeguardingCases = [], onNavigateToStudent }) => {
   const [selectedClass, setSelectedClass] = useState<string>('');
   const [desks, setDesks] = useState<Desk[]>([]);
   const [activeLayoutId, setActiveLayoutId] = useState<string | null>(null);
@@ -480,6 +482,11 @@ const SeatingPlanView: React.FC<SeatingPlanViewProps> = ({ onSave, behaviourEntr
                             onTouchStart={(e) => handleTouchStart(e, desk.id)}
                             onDragOver={(e) => e.preventDefault()}
                             onDrop={(e) => handleDrop(e, desk.id)}
+                            onDoubleClick={(e) => {
+                                e.stopPropagation();
+                                if(studentName) onNavigateToStudent(studentName);
+                            }}
+                            title={studentName ? "Double click to view profile" : undefined}
                             className={`group rounded-xl border-2 flex flex-col items-center justify-center relative select-none
                                 ${desk.type === 'TEACHER' ? 'bg-amber-50 border-amber-300 w-32 h-20' :
                                   desk.type === 'BOARD' ? 'bg-slate-800 border-slate-900 w-72 h-4 text-white rounded-full' :
@@ -527,8 +534,17 @@ const SeatingPlanView: React.FC<SeatingPlanViewProps> = ({ onSave, behaviourEntr
                                             <p className={`text-[10px] leading-tight line-clamp-2 ${labelStyle}`}>{studentName}</p>
                                             
                                             <button 
+                                                onClick={(e) => { e.stopPropagation(); onNavigateToStudent(studentName); }}
+                                                className="absolute -top-3 -left-3 hidden group-hover:flex bg-white rounded-full shadow border border-slate-200 p-0.5 z-30 scale-90 text-slate-500 hover:text-blue-600"
+                                                title="View Profile"
+                                            >
+                                                <User size={12} />
+                                            </button>
+
+                                            <button 
                                                 onClick={(e) => { e.stopPropagation(); const clean = desks.map(d => d.id === desk.id ? { ...d, studentId: undefined } : d); setDesks(clean); }}
-                                                className="absolute -top-1 -left-1 bg-red-100 text-red-500 rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                className="absolute -bottom-2 -right-2 bg-red-100 text-red-500 rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                title="Remove Student"
                                             >
                                                 <X size={10} />
                                             </button>

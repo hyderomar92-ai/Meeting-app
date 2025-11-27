@@ -547,7 +547,11 @@ const Dashboard: React.FC<DashboardProps> = ({ logs, safeguardingCases, behaviou
                       </div>
                     ) : (
                       recentLogs.map(log => (
-                        <div key={log.id} className="flex items-start p-4 bg-slate-50/50 hover:bg-slate-50 rounded-xl border border-slate-100 transition-colors group">
+                        <div 
+                            key={log.id} 
+                            onClick={() => onNavigate('STUDENT_PROFILE', log.attendees[0])}
+                            className="flex items-start p-4 bg-slate-50/50 hover:bg-slate-50 rounded-xl border border-slate-100 transition-colors group cursor-pointer"
+                        >
                           <div className={`w-2.5 h-2.5 mt-2 rounded-full mr-4 flex-shrink-0 ${
                             log.type === MeetingType.IEP ? 'bg-red-500' : 
                             log.type === MeetingType.BEHAVIORAL ? 'bg-orange-500' : 'bg-blue-500'
@@ -555,7 +559,7 @@ const Dashboard: React.FC<DashboardProps> = ({ logs, safeguardingCases, behaviou
                           <div className="flex-1 min-w-0">
                             <div className="flex justify-between items-start">
                                 <div>
-                                    <p className="text-sm font-bold text-slate-800 truncate">
+                                    <p className="text-sm font-bold text-slate-800 truncate group-hover:text-blue-600 transition-colors">
                                         {log.attendees.join(', ')}
                                     </p>
                                     <div className="flex items-center text-xs text-slate-500 mt-1">

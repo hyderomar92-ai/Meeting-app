@@ -135,6 +135,7 @@ const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
   const [currentView, setCurrentView] = useState<ViewState>('DASHBOARD');
   const [selectedStudent, setSelectedStudent] = useState<string | undefined>(undefined);
+  const [escalationData, setEscalationData] = useState<{ studentName: string; description: string; date: string } | null>(null);
 
   // --- Data Stores (Persisted) ---
   const [allUsers, setAllUsers] = useState<UserProfile[]>(() => {
@@ -226,6 +227,7 @@ const App: React.FC = () => {
     setCurrentUser(null);
     setCurrentView('DASHBOARD');
     setSelectedStudent(undefined);
+    setEscalationData(null);
   };
 
   const handleNavigate = (view: ViewState, studentName?: string) => {
@@ -244,6 +246,7 @@ const App: React.FC = () => {
   const handleSaveSafeguarding = (newCase: SafeguardingCase) => {
     const caseWithTenant = { ...newCase, orgId: currentUser?.orgId };
     setAllSafeguarding(prev => [caseWithTenant, ...prev]);
+    setEscalationData(null); // Clear escalation state on save
   };
 
   const handleUpdateSafeguarding = (updatedCase: SafeguardingCase) => {
@@ -361,7 +364,7 @@ const App: React.FC = () => {
               currentUser={currentUser}
               initialAttendees={selectedStudent ? [selectedStudent] : []}
               onEscalate={(data) => {
-                  setSelectedStudent(data.studentName);
+                  setEscalationData(data);
                   handleNavigate('SAFEGUARDING');
               }}
             />
@@ -413,12 +416,19 @@ const App: React.FC = () => {
               <SafeguardingBuilder 
                   cases={tenantData.safeguarding}
                   logs={tenantData.logs}
-                  onSave={handleSaveSafeguarding}
+                  onSave={(c) => {
+                      handleSaveSafeguarding(c);
+                      handleNavigate('SAFEGUARDING'); // Stay on list or navigate elsewhere
+                  }}
                   onUpdate={handleUpdateSafeguarding}
                   onDelete={handleDeleteSafeguarding}
-                  onCancel={() => handleNavigate('DASHBOARD')}
+                  onCancel={() => {
+                      setEscalationData(null);
+                      handleNavigate('DASHBOARD');
+                  }}
                   currentUser={currentUser}
                   initialSearchTerm={selectedStudent}
+                  initialData={escalationData}
               />
           )}
 
@@ -434,6 +444,7 @@ const App: React.FC = () => {
                   currentUser={currentUser}
                   entries={tenantData.behavior}
                   onAddEntries={handleAddBehaviour}
+                  onNavigateToStudent={(name) => handleNavigate('STUDENT_PROFILE', name)}
               />
           )}
 
@@ -441,6 +452,7 @@ const App: React.FC = () => {
               <SeatingPlanView 
                   behaviourEntries={tenantData.behavior}
                   safeguardingCases={tenantData.safeguarding}
+                  onNavigateToStudent={(name) => handleNavigate('STUDENT_PROFILE', name)}
               />
           )}
 

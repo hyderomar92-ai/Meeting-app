@@ -2,7 +2,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { MeetingType, MeetingLog, ActionItem, UserProfile } from '../types';
 import { analyzeLogEntry, generateSmartActions } from '../services/geminiService';
-import { Sparkles, Save, X, Plus, Loader2, User, AlertCircle, Mic, MicOff, FileText, Zap, ShieldAlert, ArrowRight, Tag, Check, Cloud, Mail } from 'lucide-react';
+import { Sparkles, Save, X, Plus, Loader2, User, AlertCircle, Mic, MicOff, FileText, Zap, ShieldAlert, ArrowRight, Tag, Check, Cloud, Mail, Shield } from 'lucide-react';
 import { STUDENTS } from '../data/students';
 import { useLanguage } from '../contexts/LanguageContext';
 
@@ -659,22 +659,35 @@ const MeetingForm: React.FC<MeetingFormProps> = ({ onSubmit, onCancel, initialAt
             )}
         </div>
 
-        <div className="flex justify-end space-x-4 pt-2 border-t border-slate-200">
+        <div className="flex justify-between items-center pt-2 border-t border-slate-200">
+           {/* Manual Escalation Button */}
            <button 
               type="button" 
-              onClick={onCancel}
-              className="px-6 py-2 rounded-lg border border-slate-300 text-slate-700 font-medium hover:bg-slate-50 transition-colors"
+              onClick={handleEscalateClick}
+              className="px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg text-sm font-bold flex items-center transition-colors"
+              title="Escalate this log to a formal Safeguarding Case"
             >
-              Cancel
+              <ShieldAlert size={16} className="mr-2" />
+              Escalate to Safeguarding
             </button>
-            <button 
-              type="submit"
-              disabled={attendees.length === 0}
-              className="flex items-center space-x-2 px-6 py-2 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 shadow-lg shadow-blue-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <Save size={18} />
-              <span>Save Log</span>
-            </button>
+
+           <div className="flex space-x-4">
+               <button 
+                  type="button" 
+                  onClick={onCancel}
+                  className="px-6 py-2 rounded-lg border border-slate-300 text-slate-700 font-medium hover:bg-slate-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit"
+                  disabled={attendees.length === 0}
+                  className="flex items-center space-x-2 px-6 py-2 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 shadow-lg shadow-blue-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Save size={18} />
+                  <span>Save Log</span>
+                </button>
+           </div>
         </div>
       </form>
     </div>

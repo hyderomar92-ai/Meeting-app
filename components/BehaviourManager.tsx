@@ -9,6 +9,7 @@ interface BehaviourManagerProps {
   currentUser: UserProfile;
   entries: BehaviourEntry[];
   onAddEntries: (entries: BehaviourEntry[]) => void;
+  onNavigateToStudent: (studentName: string) => void;
 }
 
 const POSITIVE_CATEGORIES = [
@@ -27,7 +28,7 @@ const NEGATIVE_CATEGORIES = [
   { label: 'Lack of Equipment', points: -1 },
 ];
 
-const BehaviourManager: React.FC<BehaviourManagerProps> = ({ currentUser, entries, onAddEntries }) => {
+const BehaviourManager: React.FC<BehaviourManagerProps> = ({ currentUser, entries, onAddEntries, onNavigateToStudent }) => {
   // View State
   const [activeTab, setActiveTab] = useState<'LEADERBOARD' | 'LOG_ENTRY'>('LEADERBOARD');
   const [selectedClass, setSelectedClass] = useState<string>('');
@@ -350,12 +351,12 @@ const BehaviourManager: React.FC<BehaviourManagerProps> = ({ currentUser, entrie
                                         idx === 2 ? <span className="text-amber-700">🥉 3</span> : idx + 1}
                                     </td>
                                     <td className="py-3">
-                                      <div className="flex items-center">
-                                          <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-500 mr-3">
+                                      <div className="flex items-center cursor-pointer group/student" onClick={() => onNavigateToStudent(student.name)}>
+                                          <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-500 mr-3 group-hover/student:bg-blue-100 group-hover/student:text-blue-700 transition-colors">
                                             {student.name.charAt(0)}
                                           </div>
                                           <div>
-                                            <p className="text-sm font-semibold text-slate-700">{student.name}</p>
+                                            <p className="text-sm font-semibold text-slate-700 group-hover/student:text-blue-600 transition-colors">{student.name}</p>
                                             <p className="text-xs text-slate-400">{student.class || 'No Class'}</p>
                                           </div>
                                       </div>
@@ -410,7 +411,7 @@ const BehaviourManager: React.FC<BehaviourManagerProps> = ({ currentUser, entrie
                                     {entry.type === 'POSITIVE' ? <Star size={14} /> : <AlertCircle size={14} />}
                                 </div>
                                 <div>
-                                    <p className="text-sm font-medium text-slate-800">{entry.studentName}</p>
+                                    <p className="text-sm font-medium text-slate-800 cursor-pointer hover:text-blue-600" onClick={() => onNavigateToStudent(entry.studentName)}>{entry.studentName}</p>
                                     <p className="text-xs text-slate-500 mb-1">
                                       {entry.type === 'POSITIVE' ? 'Awarded' : 'Sanctioned'}: <span className="font-semibold">{entry.category}</span>
                                     </p>
